@@ -6,29 +6,32 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
-  AppState,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-// 1. Drizzle Migration Importları
-import { db } from "@/db/client"; // Kendi db dosyanızın yolu
-import migrations from "@/drizzle/migrations"; // npx drizzle-kit generate ile oluşan klasör
+import { db } from "@/db/client";
+import migrations from "@/drizzle/migrations";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
 
-// Bileşenler ve Servisler
-import { ToastProvider } from "@/components/ui/toast";
-
 // Temalar ve Hooklar
+import { TimeEngineProvider } from "@/context/TimeEngineContext";
 import { useModeToggle } from "@/hooks/useModeToggle";
-import { useLocationStore } from "@/store/useLocationStore";
 import { Colors } from "@/theme/colors";
 import { Spacing, Typography } from "@/theme/globals";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -46,59 +49,45 @@ export default function RootLayout() {
 
   const { isDark } = useModeToggle();
   const activeColors = isDark ? Colors.dark : Colors.light;
-  const fetchLocation = useLocationStore((s) => s.fetchLocation);
-  const appState = useRef(AppState.currentState);
 
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextAppState) => {
-      if (
-        appState.current.match(/inactive|background/) &&
-        nextAppState === "active"
-      ) {
-        fetchLocation();
-      }
-      appState.current = nextAppState;
-    });
+  const isInitialized = useRef(false);
 
-    async function initializeApp() {
-      try {
-        // 2. MIGRATION İŞLEMİ (Tabloları Oluşturur)
-        // Eğer tablolar yoksa oluşturur, varsa atlar.
-        await migrate(db, migrations);
+  const initializeApp = useCallback(async () => {
+    if (isInitialized.current) return;
+    isInitialized.current = true;
 
-        // Konumu çek
-        fetchLocation();
-
-        // Gecikme simülasyonu (Opsiyonel)
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        setAppReady(true);
-      } catch (e: any) {
-        setErrorMsg(e.message || "Veritabanı oluşturulurken hata oluştu.");
-      } finally {
-        await SplashScreen.hideAsync();
-      }
+    try {
+      setErrorMsg(null);
+      await migrate(db, migrations);
+      setAppReady(true);
+    } catch (e: any) {
+      setErrorMsg(e.message || "Veritabanı oluşturulurken hata oluştu.");
+      setAppReady(false);
+      isInitialized.current = false;
+    } finally {
+      await SplashScreen.hideAsync();
     }
-
-    initializeApp();
-
-    return () => {
-      subscription.remove();
-    };
   }, []);
 
-  const navigationTheme = {
-    ...(isDark ? DarkTheme : DefaultTheme),
-    colors: {
-      ...(isDark ? DarkTheme.colors : DefaultTheme.colors),
-      primary: activeColors.active,
-      background: activeColors.background,
-      card: activeColors.card,
-      text: activeColors.text,
-      border: activeColors.border,
-      notification: activeColors.active,
-    },
-  };
+  useEffect(() => {
+    initializeApp();
+  }, [initializeApp]);
+
+  const navigationTheme = useMemo(
+    () => ({
+      ...(isDark ? DarkTheme : DefaultTheme),
+      colors: {
+        ...(isDark ? DarkTheme.colors : DefaultTheme.colors),
+        primary: activeColors.active,
+        background: activeColors.background,
+        card: activeColors.card,
+        text: activeColors.text,
+        border: activeColors.border,
+        notification: activeColors.active,
+      },
+    }),
+    [isDark, activeColors],
+  );
 
   if (errorMsg) {
     return (
@@ -111,16 +100,9 @@ export default function RootLayout() {
         <Text style={[styles.errorSub, { color: activeColors.textMuted }]}>
           {errorMsg}
         </Text>
-        <Text
-          style={{ color: activeColors.active, marginTop: 20 }}
-          onPress={() => {
-            setErrorMsg(null);
-            setAppReady(false);
-            // Hata durumunda yeniden deneme butonu
-          }}
-        >
-          Yeniden Dene
-        </Text>
+        <TouchableOpacity onPress={initializeApp} style={{ marginTop: 20 }}>
+          <Text style={{ color: activeColors.active }}>Yeniden Dene</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -131,38 +113,51 @@ export default function RootLayout() {
         style={[styles.center, { backgroundColor: activeColors.background }]}
       >
         <ActivityIndicator size="large" color={activeColors.active} />
-        <Text style={[styles.loadingText, { color: activeColors.textMuted }]}>
-          Veritabanı Hazırlanıyor...
-        </Text>
       </View>
     );
   }
 
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider value={navigationTheme}>
-          <ToastProvider>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: activeColors.background },
-                animation: "fade",
-              }}
-            >
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen
-                name="deed/[id]"
-                options={{
-                  presentation: "transparentModal",
-                  animation: "fade_from_bottom",
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider value={navigationTheme}>
+            <TimeEngineProvider>
+              <Stack
+                screenOptions={{
+                  headerShown: false,
                   contentStyle: { backgroundColor: activeColors.background },
+                  animation: "fade",
                 }}
-              />
-            </Stack>
-          </ToastProvider>
-        </ThemeProvider>
-      </QueryClientProvider>
+              >
+                <Stack.Screen name="index" />
+                <Stack.Screen
+                  options={{
+                    presentation: "transparentModal",
+                    animation: "fade_from_bottom",
+                  }}
+                  name="stats"
+                />
+                <Stack.Screen name="profile" />
+                <Stack.Screen
+                  name="library"
+                  options={{
+                    presentation: "transparentModal",
+                    animation: "fade_from_bottom",
+                  }}
+                />
+                <Stack.Screen
+                  name="deed/[id]"
+                  options={{
+                    presentation: "transparentModal",
+                    animation: "fade_from_bottom",
+                  }}
+                />
+              </Stack>
+            </TimeEngineProvider>
+          </ThemeProvider>
+        </QueryClientProvider>
+      </GestureHandlerRootView>
     </SafeAreaProvider>
   );
 }
@@ -182,10 +177,5 @@ const styles = StyleSheet.create({
   errorSub: {
     fontSize: Typography.body,
     textAlign: "center",
-  },
-  loadingText: {
-    marginTop: Spacing.md,
-    fontSize: Typography.subtext,
-    fontWeight: "600",
   },
 });

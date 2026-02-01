@@ -1,153 +1,67 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { Bell } from "lucide-react-native";
-import React, { useMemo, useState } from "react";
-import { ActivityIndicator, StyleSheet, Switch, View } from "react-native";
-
-// --- BİLEŞENLER ---
-import { DeedDetailTemplate } from "@/components/library/organisms/DeedDetailTemplate";
-import { DeedHeader } from "@/components/library/organisms/DeedHeader";
-import { ScoreCard } from "@/components/library/organisms/ScoreCard";
-import { SourceCard } from "@/components/library/organisms/SourceCard";
-import { StreakCard } from "@/components/library/organisms/StreakCard";
-import { TotalGainCard } from "@/components/library/organisms/TotalGainCard";
+import { DeedActivityHeatmap } from "@/components/layout/modals/deed-details/components/DeedActivityHeatmap";
+import DeedDetailsHeader from "@/components/layout/modals/deed-details/components/DeedDetailsHeader";
+import { DetailsStatistic } from "@/components/layout/modals/deed-details/components/DeedDetailsStatisticCard";
+import DeedStatusCards from "@/components/layout/modals/deed-details/components/DeedResourcesCards";
+import { ParallaxScrollView } from "@/components/ui/parallax-scrollview";
 import { Text } from "@/components/ui/text";
-
-// --- HOOKLAR & TEMA ---
-// Not: Bu hookları önceki adımda ayırmıştık
-import { useDeed, useDeedStatus } from "@/db/hooks/useAllQueries";
-
-import { useModeToggle } from "@/hooks/useModeToggle";
-import { Spacing } from "@/theme/globals";
-import { useColors } from "@/theme/useColors";
+import { View } from "@/components/ui/view";
+import { useDeed } from "@/db/hooks/useAllQueries";
+import { useLocalSearchParams } from "expo-router";
 
 export default function DeedDetailScreen() {
   const { id } = useLocalSearchParams();
-  const router = useRouter();
-  const { isDark } = useModeToggle();
-
   const deedId = id ? Number(id) : 0;
-
-  const { background, card, textMuted, iconBg, active } = useColors();
-
-  const { data: deed, isLoading: isDeedLoading } = useDeed(deedId);
-
-  const { data: isAdded = false } = useDeedStatus(deedId);
-
-  const [reminder, setReminder] = useState(true);
-
-  const streakData = useMemo(
-    () => Array.from({ length: 21 }, (_, i) => (i < 7 ? 1 : 0)),
-    [],
-  );
-  const currentLevel = 1;
-
-  if (isDeedLoading) {
-    return (
-      <View style={[styles.loading, { backgroundColor: background }]}>
-        <ActivityIndicator size="large" color={active} />
-      </View>
-    );
-  }
-
-  if (!deed) return null;
-
-  const THEME_COLOR = deed.colorCode || active;
-
+  const { data } = useDeed(deedId);
+  if (!data) return null;
+  console.log(JSON.stringify(data, null, 2));
   return (
-    <DeedDetailTemplate
-      header={
-        <DeedHeader
-          title={deed.title}
-          status={deed.statusName || "Genel"}
-          // isAdded durumu ayrı hooktan geliyor
-          isAdded={isAdded}
-          color={THEME_COLOR}
-          onBack={() => router.back()}
+    <ParallaxScrollView
+      headerHeight={260}
+      headerImage={
+        <DeedDetailsHeader
+          categoryName={String(data?.categoryName)}
+          periodTitle={String(data?.periodTitle)}
+          color={String(data?.colorCode)}
+          type={String(data?.statusName)}
+          title={String(data?.title)}
+          description={String(data?.description)}
         />
       }
     >
-      {/* Puan Kartı */}
-      <ScoreCard
-        total={
-          ((deed.deedPoints || 0) + (deed.intentionPoints || 0)) * currentLevel
-        }
-        niyet={deed.intentionPoints || 0}
-        amel={(deed.deedPoints || 0) * currentLevel}
-        color={THEME_COLOR}
-      />
-
-      {/* Kaynaklar (Ayet/Hadis) */}
-      {/* useDeed hook'u resources array'ini statik olarak getirir */}
-      {deed.resources?.map((res, index) => (
-        <SourceCard
-          key={`res-${res.id || index}`}
-          type={res.type} // "AYET" veya "HADIS"
-          text={res.content} // Metin
-          refInfo={res.sourceInfo} // Kaynakça
-          color={THEME_COLOR}
-        />
-      ))}
-
-      {/* İstatistik Kartları */}
-      <StreakCard
-        level={currentLevel}
-        multiplier={currentLevel}
-        streakData={streakData}
-        color={THEME_COLOR}
-      />
-
-      <TotalGainCard totalPoints={1250} rank="Sıddık" color={THEME_COLOR} />
-
-      {/* Hatırlatıcı Ayarı */}
-      <View
-        style={[
-          styles.reminderCard,
-          { backgroundColor: card, marginTop: Spacing.lg },
-        ]}
-      >
-        <View style={[styles.reminderIcon, { backgroundColor: iconBg }]}>
-          <Bell size={24} color={active} />
+      <View style={{ gap: 16 }}>
+        <View>
+          <Text variant="title">Fazileti</Text>
+          <Text>{data?.virtueText}</Text>
         </View>
-        <View style={{ flex: 1, marginLeft: Spacing.md }}>
-          <Text style={styles.reminderTitle}>Hatırlatıcı Kur</Text>
-          <Text style={[styles.reminderSub, { color: textMuted }]}>
-            Vakit geldiğinde bildirim al
-          </Text>
-        </View>
-        <Switch
-          value={reminder}
-          onValueChange={setReminder}
-          trackColor={{ true: THEME_COLOR, false: isDark ? "#333" : "#ccc" }}
-        />
+
+        <DeedStatusCards resources={data?.resources} />
+        {data?.isAdded && (
+          <View
+            style={{
+              borderTopWidth: 0.5,
+              borderTopColor: "#e5e7eb",
+              paddingTop: 16,
+              marginTop: 16,
+              alignItems: "center",
+            }}
+          >
+            <Text
+              variant="caption"
+              style={{ color: "#9ca3af", marginBottom: 12 }}
+            >
+              {data?.title} İstatistikleri
+            </Text>
+
+            <DetailsStatistic
+              id={deedId}
+              level={data?.level}
+              deedPoints={data?.deedPoints}
+              intentionPoints={data?.intentionPoints}
+            />
+            <DeedActivityHeatmap id={deedId} />
+          </View>
+        )}
       </View>
-    </DeedDetailTemplate>
+    </ParallaxScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  reminderCard: {
-    borderRadius: 24,
-    padding: Spacing.md + 4,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  reminderIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  reminderTitle: {
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  reminderSub: {
-    fontSize: 12,
-  },
-});

@@ -1,0 +1,17 @@
+id,baslik,aciklama,fazilet_metni,kerahat_mask,puan_niyet,puan_amel,amel_kategori_id,amel_durumu_id,donem_id,start_ref,end_ref,updated_at
+1,Sabah Namazı,Günün ilk nuru ve bereketi.,Sabah namazını kılan Allah'ın himayesindedir.,,10,2345,1,1,1,FAJR,SUNRISE,2026-01-29 20:10:38+00
+2,Kur'an Okumak,Günlük en az 3 sayfa tilavet.,"Kur'an okuyun, çünkü o kıyamet günü şefaatçi olarak gelir.",,10,30,3,2,1,,,2026-01-29 18:46:08.222007+00
+3,İşrak Namazı,Güneş doğup kerahat çıktıktan sonra.,Kim sabah namazını kılıp güneş doğana kadar zikirle meşgul olursa bir hac ve umre sevabı alır.,DOGUS,10,500,1,2,1,SUNRISE,ISHRAK,2026-01-29 18:46:08.222007+00
+4,Gizli Sadaka,Sağ elin verdiğini sol el görmesin.,Gizli sadaka Rabb'in gazabını söndürür.,,20,80,5,3,1,,,2026-01-29 18:46:08.222007+00
+5,Teheccüd Namazı,Gecenin en kıymetli vaktinde.,Farzlardan sonra en faziletli namaz gece namazıdır.,,20,500,1,2,1,LAST_THIRD,FAJR,2026-01-29 18:46:08.222007+00
+7,100 Salavat,Günde 100 salavat,Günde 100 salavat,,100,100,2,4,1,,,2026-01-29 18:46:08.222007+00
+8,Estağfirullah,,,,10,100,2,4,1,,,2026-01-29 18:46:08.222007+00
+9,Sübhanallahi Ve Bihamdihi,Allah (c.c)’ı hamd ile tesbih ederim,,,10,100,2,4,1,,,2026-01-29 18:46:08.222007+00
+10,Lâ havle ve lâ kuvvete illâ billâh,"Günahlardan korunmaya güç yetirmek ve taate kuvvet bulmak, ancak Allah’ın tevfik ve yardımıyladır",,,10,100,2,4,1,,,2026-01-29 18:46:08.222007+00
+11,"100 La İlahe İllALLAH  ",Zikrin en faziletlisi lâ ilâhe illallah’tır.,,,10,100,2,4,1,,,2026-01-29 18:46:08.222007+00
+12,Kuşluk (Duha) Namazı,En az 2 Rekat,,,50,500,1,2,1,ISHRAK,ISTIVA,2026-01-29 18:46:08.222007+00
+13,Pazartesi/Perşembe Orucu,Herhangi biri yapılsa kafi,,,10,1000,4,2,3,FAJR,MAGHRIB,2026-01-29 18:46:08.222007+00
+14,Öğle Namazı,Öğle Namazı 4 rekattir,,,100,10000,1,1,1,DHUHR,ASR,2026-01-29 18:46:08.222007+00
+15,İkindi Namazı,İkindi Namazı 10 rekattir,,,100,10000,1,1,1,ASR,MAGHRIB,2026-01-29 18:46:08.222007+00
+16,Akşam Namazı,Akşam Namazı 5 rekattir.,,,100,10000,1,1,1,MAGHRIB,ISHA,2026-01-29 18:46:08.222007+00
+17,Yatsı Namazı,Yatsı Namazı 13 rekattir,,,100,10000,1,1,1,ISHA,MIDNIGHT,2026-01-29 18:46:08.222007+00

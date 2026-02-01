@@ -1,6 +1,5 @@
 import { Text } from "@/components/ui/text";
 import { View } from "@/components/ui/view";
-import { CORNERS } from "@/theme/globals";
 import { useColor } from "@/theme/useColor";
 import { TextStyle, ViewStyle } from "react-native";
 
@@ -39,7 +38,7 @@ export function Badge({
       justifyContent: "center",
       paddingVertical: 6,
       paddingHorizontal: 12,
-      borderRadius: CORNERS,
+      borderRadius: 12,
     };
 
     switch (variant) {

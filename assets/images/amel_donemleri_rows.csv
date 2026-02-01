@@ -1,0 +1,7 @@
+id,kod,baslik,oncelik
+1,DAILY,Her Gün,1
+2,WEEKLY_FRI,Cuma Günü,5
+3,WEEKLY_MON_THU,Pazartesi / Perşembe,5
+4,YEARLY_RAMADAN,Ramazan Ayı,10
+5,SPECIAL_QADR,Kadir Gecesi,20
+6,SPECIAL_AREFE,Arefe Günü,15

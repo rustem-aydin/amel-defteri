@@ -1,5 +1,7 @@
-import { sql } from "drizzle-orm";
-import { db } from "../db/client";
+// services/syncService.ts
+
+import { db } from "@/db/client";
+import { desc, sql } from "drizzle-orm"; // ✅ 'desc' ekledik
 import {
   deedCategories,
   deedPeriods,
@@ -7,16 +9,53 @@ import {
   deeds,
   deedStatuses,
   resources,
-} from "../db/schema"; // Yeni İngilizce tablo isimleri
+} from "../db/schema";
 import { supabase } from "./supabase";
 
 let isSyncing = false;
+
+export const checkForUpdates = async (): Promise<boolean> => {
+  try {
+    // 1. SQLite'daki en son güncellenmiş kaydı bul (En sağlam yöntem)
+    const localResult = await db
+      .select({ updatedAt: deeds.updatedAt })
+      .from(deeds)
+      .orderBy(desc(deeds.updatedAt))
+      .limit(1)
+      .get();
+
+    // Değer null ise çok eski bir tarih kullanıyoruz
+    const lastLocalUpdate = localResult?.updatedAt || "2000-01-01T00:00:00Z";
+
+    console.log("🔍 SQLite'daki Son Tarih:", lastLocalUpdate);
+
+    // 2. Supabase Sorgusu (head: true ile sıfır data transferi)
+    const { count, error } = await supabase
+      .from("ameller")
+      .select("id", { count: "exact", head: true })
+      .gt("updated_at", lastLocalUpdate);
+
+    if (error) {
+      console.error("❌ Supabase Hatası:", error.message);
+      return false;
+    }
+
+    const hasNewData = (count || 0) > 0;
+    if (hasNewData) console.log(`🚀 Sunucuda ${count} yeni/güncel kayıt var!`);
+
+    return hasNewData;
+  } catch (error) {
+    console.error("🚨 Güncelleme kontrolünde hata:", error);
+    return false;
+  }
+};
 
 export const syncAllData = async () => {
   if (isSyncing) return { status: "LOCKED" };
   isSyncing = true;
 
   try {
+    // Supabase'den tüm tabloları çek
     const [
       { data: donemler },
       { data: durumlar },
@@ -34,100 +73,80 @@ export const syncAllData = async () => {
     ]);
 
     await db.transaction(async (tx) => {
-      // --- A. Statuses (Amel Durumları) ---
-      if (durumlar && durumlar.length > 0) {
-        // Mapping: Supabase(TR) -> Local(EN)
-        const values = durumlar.map((d) => ({
-          id: d.id,
-          name: d.ad, // ad -> name
-          colorCode: d.renk_kodu, // renk_kodu -> colorCode
-        }));
-
+      // 1. Durumlar (Statuses)
+      if (durumlar?.length) {
         await tx
           .insert(deedStatuses)
-          .values(values)
+          .values(
+            durumlar.map((d) => ({
+              id: d.id,
+              name: d.ad,
+              colorCode: d.renk_kodu,
+            })),
+          )
           .onConflictDoUpdate({
             target: deedStatuses.id,
             set: {
               name: sql`excluded.name`,
-              colorCode: sql`excluded.color_code`, // SQL sütun adı snake_case
+              colorCode: sql`excluded.color_code`,
             },
           });
       }
 
-      // --- B. Periods (Amel Dönemleri) ---
-      if (donemler && donemler.length > 0) {
-        const values = donemler.map((d) => ({
-          id: d.id,
-          code: d.kod, // kod -> code
-          title: d.baslik, // baslik -> title
-        }));
-
+      // 2. Dönemler (Periods)
+      if (donemler?.length) {
         await tx
           .insert(deedPeriods)
-          .values(values)
+          .values(
+            donemler.map((d) => ({ id: d.id, code: d.kod, title: d.baslik })),
+          )
           .onConflictDoUpdate({
             target: deedPeriods.id,
-            set: {
-              code: sql`excluded.code`,
-              title: sql`excluded.title`,
-            },
+            set: { code: sql`excluded.code`, title: sql`excluded.title` },
           });
       }
 
-      // --- C. Categories (Kategoriler) ---
-      if (kategoriler && kategoriler.length > 0) {
-        const values = kategoriler.map((k) => ({
-          id: k.id,
-          name: k.ad, // ad -> name
-          iconUrl: k.ikon_url, // ikon_url -> iconUrl
-        }));
-
+      // 3. Kategoriler (Categories)
+      if (kategoriler?.length) {
         await tx
           .insert(deedCategories)
-          .values(values)
+          .values(kategoriler.map((k) => ({ id: k.id, name: k.ad })))
           .onConflictDoUpdate({
             target: deedCategories.id,
-            set: {
-              name: sql`excluded.name`,
-              iconUrl: sql`excluded.icon_url`,
-            },
+            set: { name: sql`excluded.name` },
           });
       }
 
-      // --- D. Deeds (Ameller - Ana Tablo) ---
-      if (ameller && ameller.length > 0) {
-        const values = ameller.map((a) => ({
+      // 4. Ameller (Deeds) - En Önemlisi
+      if (ameller?.length) {
+        const deedValues = ameller.map((a) => ({
           id: a.id,
-          title: a.baslik, // baslik -> title
-          description: a.aciklama, // aciklama -> description
-          virtueText: a.fazilet_metni, // fazilet_metni -> virtueText
+          title: a.baslik,
+          description: a.aciklama,
+          virtueText: a.fazilet_metni,
           startRef: a.start_ref,
           endRef: a.end_ref,
-          timeMask: a.kerahat_mask, // kerahat_mask -> timeMask
-          intentionPoints: a.puan_niyet, // puan_niyet -> intentionPoints
-          deedPoints: a.puan_amel, // puan_amel -> deedPoints
-
-          // İlişkiler (Foreign Keys)
+          timeMask: a.kerahat_mask,
+          intentionPoints: a.puan_niyet,
+          deedPoints: a.puan_amel,
           categoryId: a.amel_kategori_id,
           statusId: a.amel_durumu_id,
           periodId: a.donem_id,
+          createdAt: a.created_at || new Date().toISOString(),
+          updatedAt: a.updated_at || a.created_at || new Date().toISOString(), // ✅ Veriyi al
         }));
 
         await tx
           .insert(deeds)
-          .values(values)
+          .values(deedValues)
           .onConflictDoUpdate({
             target: deeds.id,
             set: {
               title: sql`excluded.title`,
               description: sql`excluded.description`,
               virtueText: sql`excluded.virtue_text`,
-              startRef: sql`excluded.start_ref`,
-              endRef: sql`excluded.end_ref`,
-              timeMask: sql`excluded.time_mask`,
-              intentionPoints: sql`excluded.intention_points`,
               deedPoints: sql`excluded.deed_points`,
+              updatedAt: sql`excluded.updated_at`, // ✅ Güncelleme tarihini SQLite'a yaz
               categoryId: sql`excluded.category_id`,
               statusId: sql`excluded.status_id`,
               periodId: sql`excluded.period_id`,
@@ -135,17 +154,18 @@ export const syncAllData = async () => {
           });
       }
 
-      if (kaynakList && kaynakList.length > 0) {
-        const values = kaynakList.map((k) => ({
-          id: k.id,
-          type: k.tur, // tur -> type
-          content: k.metin, // metin -> content
-          sourceInfo: k.kaynak_bilgisi, // kaynak_bilgisi -> sourceInfo
-        }));
-
+      // 5. Kaynaklar (Resources)
+      if (kaynakList?.length) {
         await tx
           .insert(resources)
-          .values(values)
+          .values(
+            kaynakList.map((k) => ({
+              id: k.id,
+              type: k.tur,
+              content: k.metin,
+              sourceInfo: k.kaynak_bilgisi,
+            })),
+          )
           .onConflictDoUpdate({
             target: resources.id,
             set: {
@@ -156,19 +176,24 @@ export const syncAllData = async () => {
           });
       }
 
-      // --- F. Deed Resources (Amel-Kaynak Bağlantısı) ---
-      if (baglantilar && baglantilar.length > 0) {
-        const values = baglantilar.map((b) => ({
-          deedId: b.amel_id, // amel_id -> deedId
-          resourceId: b.kaynak_id, // kaynak_id -> resourceId
-        }));
-
-        await tx.insert(deedResources).values(values).onConflictDoNothing();
+      // 6. Bağlantılar (Deed-Resource Junction)
+      if (baglantilar?.length) {
+        await tx
+          .insert(deedResources)
+          .values(
+            baglantilar.map((b) => ({
+              deedId: b.amel_id,
+              resourceId: b.kaynak_id,
+            })),
+          )
+          .onConflictDoNothing();
       }
     });
+    await db.select({ id: deeds.id }).from(deeds).limit(1).get();
 
     return { status: "SUCCESS" };
   } catch (error: any) {
+    console.error("❌ Sync Error:", error.message);
     return { status: "ERROR", message: error.message };
   } finally {
     isSyncing = false;

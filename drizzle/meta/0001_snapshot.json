@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5735214c-02f1-4a67-ab7e-c7aed57c51c6",
-  "prevId": "ce46a282-754d-4b14-80ef-2ea3c03ad2fc",
+  "id": "0a08e065-6470-44d2-9e1e-02486162e57b",
+  "prevId": "c9f7f3c6-38da-4818-adaf-3a6cfcabf550",
   "tables": {
     "daily_logs": {
       "name": "daily_logs",
@@ -61,6 +61,13 @@
             "date"
           ],
           "isUnique": true
+        },
+        "idx_daily_logs_date": {
+          "name": "idx_daily_logs_date",
+          "columns": [
+            "date"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -97,13 +104,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
-        },
-        "icon_url": {
-          "name": "icon_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         }
       },
@@ -170,6 +170,13 @@
             "resource_id"
           ],
           "isUnique": true
+        },
+        "idx_deed_resources_resource_id": {
+          "name": "idx_deed_resources_resource_id",
+          "columns": [
+            "resource_id"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -303,6 +310,22 @@
           "autoincrement": false,
           "default": 0
         },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP)"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(CURRENT_TIMESTAMP)"
+        },
         "category_id": {
           "name": "category_id",
           "type": "integer",
@@ -325,7 +348,36 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_deeds_category_id": {
+          "name": "idx_deeds_category_id",
+          "columns": [
+            "category_id"
+          ],
+          "isUnique": false
+        },
+        "idx_deeds_status_id": {
+          "name": "idx_deeds_status_id",
+          "columns": [
+            "status_id"
+          ],
+          "isUnique": false
+        },
+        "idx_deeds_period_id": {
+          "name": "idx_deeds_period_id",
+          "columns": [
+            "period_id"
+          ],
+          "isUnique": false
+        },
+        "idx_deeds_updated_at": {
+          "name": "idx_deeds_updated_at",
+          "columns": [
+            "updated_at"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "deeds_category_id_deed_categories_id_fk": {
           "name": "deeds_category_id_deed_categories_id_fk",
@@ -440,6 +492,22 @@
           "notNull": false,
           "autoincrement": false
         },
+        "level": {
+          "name": "level",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": 1
+        },
+        "last_milestone": {
+          "name": "last_milestone",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": 0
+        },
         "target_count": {
           "name": "target_count",
           "type": "integer",
@@ -456,6 +524,20 @@
             "deed_id"
           ],
           "isUnique": true
+        },
+        "idx_user_deeds_added_at": {
+          "name": "idx_user_deeds_added_at",
+          "columns": [
+            "added_at"
+          ],
+          "isUnique": false
+        },
+        "idx_user_deeds_removed_at": {
+          "name": "idx_user_deeds_removed_at",
+          "columns": [
+            "removed_at"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -473,40 +555,6 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "user_profile": {
-      "name": "user_profile",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        },
-        "total_points": {
-          "name": "total_points",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": 0
-        },
-        "level": {
-          "name": "level",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": 1
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}

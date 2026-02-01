@@ -1,14 +1,14 @@
 // db/schema.ts
+
+import { sql } from "drizzle-orm";
 import {
+  index,
   integer,
   sqliteTable,
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
-// 1. LIBRARY TABLES (Static Data)
-
-// "amel_donemleri" -> "deed_periods"
 export const deedPeriods = sqliteTable("deed_periods", {
   id: integer("id").primaryKey(),
   code: text("code"),
@@ -17,44 +17,56 @@ export const deedPeriods = sqliteTable("deed_periods", {
 
 export const deedStatuses = sqliteTable("deed_statuses", {
   id: integer("id").primaryKey(),
-  name: text("name").notNull(), // ad
-  colorCode: text("color_code"), // renk_kodu
+  name: text("name").notNull(),
+  colorCode: text("color_code"),
 });
 
-// "amel_kategorileri" -> "deed_categories"
 export const deedCategories = sqliteTable("deed_categories", {
   id: integer("id").primaryKey(),
-  name: text("name").notNull(), // ad
-  iconUrl: text("icon_url"), // ikon_url
+  name: text("name").notNull(),
 });
 
-// "ameller_data" -> "deeds"
-export const deeds = sqliteTable("deeds", {
-  id: integer("id").primaryKey(),
-  title: text("title").notNull(), // baslik
-  description: text("description"), // aciklama
-  virtueText: text("virtue_text"), // fazilet_metni
-  startRef: text("start_ref"), // start_ref (Teknik terim, kalabilir)
-  endRef: text("end_ref"), // end_ref
-  timeMask: text("time_mask"), // kerahat_mask (Validity/Time restriction)
-  intentionPoints: integer("intention_points").default(0), // puan_niyet
-  deedPoints: integer("deed_points").default(0), // puan_amel
+export const deeds = sqliteTable(
+  "deeds",
+  {
+    id: integer("id").primaryKey(),
+    title: text("title").notNull(),
+    description: text("description"),
+    virtueText: text("virtue_text"),
+    startRef: text("start_ref"),
+    endRef: text("end_ref"),
+    timeMask: text("time_mask"),
+    intentionPoints: integer("intention_points").default(0),
+    deedPoints: integer("deed_points").default(0),
 
-  // Foreign Keys
-  categoryId: integer("category_id").references(() => deedCategories.id),
-  statusId: integer("status_id").references(() => deedStatuses.id),
-  periodId: integer("period_id").references(() => deedPeriods.id),
-});
+    createdAt: text("created_at")
+      .default(sql`(CURRENT_TIMESTAMP)`)
+      .notNull(),
 
-// "kaynaklar" -> "resources"
+    updatedAt: text("updated_at")
+      .default(sql`(CURRENT_TIMESTAMP)`)
+      .notNull(),
+
+    categoryId: integer("category_id").references(() => deedCategories.id),
+    statusId: integer("status_id").references(() => deedStatuses.id),
+    periodId: integer("period_id").references(() => deedPeriods.id),
+  },
+  (t) => ({
+    idxCategoryId: index("idx_deeds_category_id").on(t.categoryId),
+    idxStatusId: index("idx_deeds_status_id").on(t.statusId),
+    idxPeriodId: index("idx_deeds_period_id").on(t.periodId),
+
+    idxUpdatedAt: index("idx_deeds_updated_at").on(t.updatedAt),
+  }),
+);
+
 export const resources = sqliteTable("resources", {
   id: integer("id").primaryKey(),
-  type: text("type"), // tur
-  content: text("content"), // metin
-  sourceInfo: text("source_info"), // kaynak_bilgisi
+  type: text("type"),
+  content: text("content"),
+  sourceInfo: text("source_info"),
 });
 
-// "amel_kaynak_baglanti" -> "deed_resources" (Many-to-Many)
 export const deedResources = sqliteTable(
   "deed_resources",
   {
@@ -67,41 +79,46 @@ export const deedResources = sqliteTable(
   },
   (t) => ({
     pk: uniqueIndex("pk_deed_resource").on(t.deedId, t.resourceId),
+    // ✅ Kaynaktan amele gitmek gerekirse diye (Opsiyonel ama iyi)
+    idxResourceId: index("idx_deed_resources_resource_id").on(t.resourceId),
   }),
 );
+
 export const userDeeds = sqliteTable(
   "user_deeds",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     deedId: integer("deed_id")
       .notNull()
-      .references(() => deeds.id), // İlişki
-    addedAt: text("added_at").notNull(),
-    removedAt: text("removed_at"),
+      .references(() => deeds.id),
+    addedAt: text("added_at").notNull(), // Listeye eklenme tarihi
+    removedAt: text("removed_at"), // Listeden çıkma tarihi
+    level: integer("level").default(1),
+    lastMilestone: integer("last_milestone").default(0),
+
     targetCount: integer("target_count").default(1),
   },
   (t) => ({
     idxDeedId: uniqueIndex("idx_user_deeds_unique_deed_id").on(t.deedId),
+
+    idxAddedAt: index("idx_user_deeds_added_at").on(t.addedAt),
+    idxRemovedAt: index("idx_user_deeds_removed_at").on(t.removedAt),
   }),
 );
+
 export const dailyLogs = sqliteTable(
   "daily_logs",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     deedId: integer("deed_id").references(() => deeds.id),
-    date: text("date"), // tarih
-    isIntended: integer("is_intended").default(0), // niyet_edildi
-    isCompleted: integer("is_completed").default(0), // tamamlandi
-    earnedPoints: integer("earned_points").default(0), // kazanilan_puan
+    date: text("date"), // YYYY-MM-DD formatında tutuyoruz
+    isIntended: integer("is_intended").default(0),
+    isCompleted: integer("is_completed").default(0),
+    earnedPoints: integer("earned_points").default(0),
   },
   (t) => ({
-    // Aynı gün aynı amel tekrar eklenemez
     idxDeedDate: uniqueIndex("idx_daily_logs_deed_date").on(t.deedId, t.date),
+
+    idxDate: index("idx_daily_logs_date").on(t.date),
   }),
 );
-
-export const userProfile = sqliteTable("user_profile", {
-  id: integer("id").primaryKey().default(1),
-  totalPoints: integer("total_points").default(0), // toplam_puan
-  level: integer("level").default(1), // seviye
-});

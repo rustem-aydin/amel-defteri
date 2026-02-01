@@ -1,39 +1,61 @@
-// store/useAppStore.ts
 import { format } from "date-fns";
 import { create } from "zustand";
 
-interface FilterState {
+export type ViewMode = "info" | "time" | "level";
+
+// Filtrelerin tipi
+export interface FilterState {
+  search: string;
   status: string | null;
   category: string;
+  period: string;
+  isLiveOnly: boolean;
 }
 
 interface AppState {
+  // Global App State
   selectedDate: string;
-  isLiveOnly: boolean;
+  viewMode: ViewMode;
   isFilterOpen: boolean;
+
+  // Filtre State'i
   filters: FilterState;
 
+  // Actions
   setSelectedDate: (date: string) => void;
   goToToday: () => void;
-  toggleLiveOnly: () => void;
+  setViewMode: (mode: ViewMode) => void;
   toggleFilterModal: () => void;
+
+  // Filtre Actions
   setFilters: (filters: Partial<FilterState>) => void;
   resetFilters: () => void;
 }
 
+// Varsayılan filtre değerleri
+const initialFilters: FilterState = {
+  search: "",
+  status: null,
+  category: "Tümü",
+  period: "Tümü",
+  isLiveOnly: false,
+};
+
 export const useAppStore = create<AppState>((set) => ({
   selectedDate: format(new Date(), "yyyy-MM-dd"),
-  isLiveOnly: false,
+  viewMode: "info",
   isFilterOpen: false,
-  filters: { status: null, category: "Tümü" },
+
+  filters: initialFilters,
 
   setSelectedDate: (date) => set({ selectedDate: date }),
   goToToday: () => set({ selectedDate: format(new Date(), "yyyy-MM-dd") }),
-  toggleLiveOnly: () => set((state) => ({ isLiveOnly: !state.isLiveOnly })),
+  setViewMode: (mode) => set({ viewMode: mode }),
   toggleFilterModal: () =>
     set((state) => ({ isFilterOpen: !state.isFilterOpen })),
 
   setFilters: (newFilters) =>
     set((state) => ({ filters: { ...state.filters, ...newFilters } })),
-  resetFilters: () => set({ filters: { status: null, category: "Tümü" } }),
+
+  resetFilters: () => set({ filters: initialFilters }),
 }));

@@ -1,17 +1,41 @@
 export interface DeedItem {
   id: number;
-  baslik: string;
-  aciklama: string;
-  puan_amel: number;
-  puan_niyet: number; // Bunu da ekleyelim, detayda lazım olacak
-  durum_id: number; // <--- Eklendi
-  kategori_id: number; // <--- Eklendi
-  durum_ad: string;
-  renk_kodu: string;
-  kategori_ad: string;
-  end_ref: string;
-  start_ref: string;
-  donem_kodu?: string;
-  ikon_url: string;
-  is_added?: boolean;
+  title: string;
+  description: string | null;
+  virtueText: string | null;
+
+  // ✅ DÜZELTME: Veritabanından 'null' gelebileceği için '| null' ekledik
+  deedPoints: number | null;
+  intentionPoints: number | null;
+
+  startRef: string | null;
+  endRef: string | null;
+  timeMask: string | null;
+
+  statusId: number | null;
+  categoryId: number | null;
+  periodId: number | null;
+
+  // İlişkili Tablolar (Nested Objects)
+  status: {
+    id: number;
+    name: string;
+    colorCode: string | null;
+  } | null;
+
+  category: {
+    id: number;
+    name: string;
+  } | null;
+
+  period: {
+    id: number;
+    code: string | null;
+    title: string | null;
+  } | null;
+
+  // Ekstra Alanlar
+  isAdded: boolean;
+  createdAt: string;
+  isNew?: number;
 }

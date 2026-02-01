@@ -1,72 +1,78 @@
 // hooks/use-queries.ts
 
 import {
+  calculateDeedTotalPoints,
+  calculateTotalPoints,
   getCategories,
-  getDailyLogs,
   getDeed,
+  getDeedCompletedDates,
   getDeedHistory,
   getDeedResources,
   getDeeds,
   getDeedStatus,
+  getDeedStreak,
+  getEarliestActivityDate,
+  getLibraryDashboardData,
   getPeriods,
   getStatuses,
   getUserDeeds,
-  getUserProfile,
-} from "@/db/repos/allRequest"; // Önceki adımda oluşturduğumuz dosya
-import { useQuery } from "@tanstack/react-query";
+} from "@/db/repos/allRequest";
+import { useSyncStore } from "@/store/useSyncStore";
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useEffect } from "react";
 
-export const useDeeds = (filters: {
-  search?: string;
-  status?: string | null;
-  category?: string;
-  period?: string;
-}) => {
+export const useDeeds = (filters: any) => {
+  const version = useSyncStore((s) => s.version);
+
   return useQuery({
-    queryKey: ["deeds", filters],
-    queryFn: () => getDeeds(filters),
+    queryKey: ["deeds", filters, version],
+    queryFn: async () => {
+      console.log("🔍 getDeeds çalıştı - version:", version);
+      const result = await getDeeds(filters);
+      console.log("📊 Sonuç sayısı:", result.length);
+      return result;
+    },
+    placeholderData: keepPreviousData,
+    staleTime: 0,
   });
 };
-/**
- * Tek bir amelin detayını getirir
- */
 export const useDeed = (id: number) => {
   return useQuery({
-    queryKey: ["deed-static", id], // Key değişti: deed-static
+    queryKey: ["deed-static", id],
     queryFn: () => getDeed(id),
     enabled: !!id,
-    staleTime: 1000 * 60 * 60, // 1 Saat boyunca taze kabul et (DB'ye gitmez)
+    staleTime: 1000 * 60 * 60,
   });
 };
 
 export const useDeedStatus = (id: number) => {
   return useQuery({
-    queryKey: ["deed-status", id], // Key: deed-status
+    queryKey: ["deed-status", id],
     queryFn: () => getDeedStatus(id),
     enabled: !!id,
-    // staleTime vermiyoruz, varsayılan olarak 0 (her zaman taze veri ister)
   });
 };
-/**
- * Kategorileri getirir
- */
+
 export const useCategories = () => {
   return useQuery({
     queryKey: ["categories"],
     queryFn: getCategories,
-    staleTime: Infinity, // Kategoriler nadiren değişir
+    staleTime: Infinity,
   });
 };
 
 export const usePeriods = () => {
   return useQuery({
-    queryKey: ["resources"],
+    queryKey: ["periods"], // "resources" key'ini düzelttim
     queryFn: getPeriods,
-    staleTime: Infinity, // Kategoriler nadiren değişir
+    staleTime: Infinity,
   });
 };
-/**
- * Durumları (Farz, Sünnet vb.) getirir
- */
+
 export const useStatuses = () => {
   return useQuery({
     queryKey: ["statuses"],
@@ -75,9 +81,6 @@ export const useStatuses = () => {
   });
 };
 
-/**
- * Bir amelin kaynaklarını (Ayet/Hadis) getirir
- */
 export const useDeedResources = (deedId: number) => {
   return useQuery({
     queryKey: ["deed-resources", deedId],
@@ -87,31 +90,86 @@ export const useDeedResources = (deedId: number) => {
 };
 
 // ==========================================
-// 2. KULLANICI & TAKVİM HOOKLARI
+// 2. KULLANICI & TAKVİM HOOKLARI (OPTIMIZED)
 // ==========================================
 
-/**
- * Kullanıcının belirli bir tarihteki ABONELİKLERİNİ getirir.
- * (Henüz gün filtresi uygulanmamış ham liste)
- */
-export const useUserDeeds = (date: string) => {
-  return useQuery({
-    queryKey: ["user-deeds", date],
-    queryFn: () => getUserDeeds(date),
+// Yardımcı Fonksiyon: Gün Ekle/Çıkar
+const addDays = (dateStr: string, days: number): string => {
+  const date = new Date(dateStr);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().split("T")[0];
+};
+
+// JS tarafında filtreleme (Haftanın günlerine göre)
+const filterDeedsByPeriod = (userDeeds: any[], dateStr: string) => {
+  const dateObj = new Date(dateStr);
+  const dayOfWeek = dateObj.getDay(); // 0: Pazar, 1: Pzt...
+
+  return userDeeds.filter((item) => {
+    const code = item.periodCode;
+    switch (code) {
+      case "DAILY":
+        return true;
+      case "WEEKLY_FRI":
+        return dayOfWeek === 5;
+      case "WEEKLY_MON_THU":
+        return dayOfWeek === 1 || dayOfWeek === 4;
+      default:
+        return true;
+    }
   });
 };
 
-export const useDailyLogs = (date: string, deedIds: number[]) => {
+/**
+ * 🔥 OPTİMİZE EDİLMİŞ GÜNLÜK PLAN
+ * Tek bir SQL sorgusu ile her şeyi getirir.
+ */
+export const useDailyPlan = (date: string) => {
   return useQuery({
-    queryKey: ["daily-logs", date, deedIds], // deedIds değişirse tekrar çeker
-    queryFn: () => getDailyLogs(date, deedIds),
-    enabled: deedIds.length > 0, // ID listesi boşsa sorgu atma
+    queryKey: ["daily-plan", date],
+    queryFn: async () => {
+      const data = await getUserDeeds(date);
+      // Log verileri zaten data'nın içinde (isCompleted, logId vs.)
+      return filterDeedsByPeriod(data, date);
+    },
+    staleTime: 1000 * 60 * 2, // 2 dk cache (DB'yi rahatlatır)
   });
 };
 
 /**
- * İstatistik: Bir amelin geçmiş loglarını getirir
+ * 🚀 SİHİRLİ PRELOADER
+ * Bunu ana sayfana ekle. Dünü ve Yarını arka planda yükler.
  */
+export const useCalendarPreload = (currentDate: string) => {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const datesToPreload = [
+      addDays(currentDate, 1), // Yarın
+      addDays(currentDate, -1), // Dün
+    ];
+
+    datesToPreload.forEach((date) => {
+      // Eğer cache'de yoksa yükle
+      const state = queryClient.getQueryState(["daily-plan", date]);
+      if (!state?.data) {
+        queryClient.prefetchQuery({
+          queryKey: ["daily-plan", date],
+          queryFn: async () => {
+            const data = await getUserDeeds(date);
+            return filterDeedsByPeriod(data, date);
+          },
+          staleTime: 1000 * 60 * 5,
+        });
+      }
+    });
+  }, [currentDate, queryClient]);
+};
+
+// ==========================================
+// 3. DİĞER HOOKLAR
+// ==========================================
+
 export const useDeedHistory = (deedId: number) => {
   return useQuery({
     queryKey: ["deed-history", deedId],
@@ -120,90 +178,51 @@ export const useDeedHistory = (deedId: number) => {
   });
 };
 
-/**
- * Kullanıcı Profilini Getirir (Puan, Seviye)
- */
-export const useUserProfile = () => {
+export const useCalculateTotalPoints = () => {
   return useQuery({
-    queryKey: ["user-profile"],
-    queryFn: getUserProfile,
+    queryKey: ["total-points"],
+    queryFn: calculateTotalPoints,
   });
 };
 
-// ==========================================
-// 3. COMPOSITE HOOK (AKILLI TAKVİM HOOKU)
-// ==========================================
-
-/*
-  BURASI ÖNEMLİ:
-  React Component içinde "Abonelikleri Çek" -> "Güne Göre Filtrele" -> "Logları Çek"
-  zincirini tek seferde yöneten "Custom Hook". 
-  
-  Sayfanda sadece bunu kullanman yeterli olacaktır.
-*/
-
-// Basit bir filtreleme fonksiyonu (Daha önce konuştuğumuz mantık)
-// Bunu utils/date-helpers.ts gibi bir yere de taşıyabilirsin.
-const filterDeedsByPeriod = (userDeeds: any[], dateStr: string) => {
-  const dateObj = new Date(dateStr);
-  const dayOfWeek = dateObj.getDay(); // 0: Pazar, 1: Pzt...
-
-  return userDeeds.filter((item) => {
-    const code = item.periodCode; // userDeeds sorgusundan gelen veri
-
-    switch (code) {
-      case "DAILY":
-        return true;
-      case "WEEKLY_FRI":
-        return dayOfWeek === 5;
-      case "WEEKLY_MON_THU":
-        return dayOfWeek === 1 || dayOfWeek === 4;
-      // Diğer özel günler buraya eklenebilir...
-      default:
-        return true; // Bilinmeyenleri göster (güvenli taraf)
-    }
+export const useStreak = (item_id: number) => {
+  return useQuery({
+    queryKey: ["deed-streak", item_id],
+    queryFn: () => getDeedStreak(item_id),
+    enabled: !!item_id,
   });
 };
 
-export const useDailyPlan = (date: string) => {
-  // 1. O tarihteki aktif abonelikleri çek
-  const {
-    data: allUserDeeds,
-    isLoading: isLoadingDeeds,
-    error: errorDeeds,
-  } = useUserDeeds(date);
-
-  // 2. Gelen listeyi o güne (Pzt, Salı vb.) göre filtrele
-  // useQuery sonucu gelmeden filtreleme yapma
-  const todaysDeeds = allUserDeeds
-    ? filterDeedsByPeriod(allUserDeeds, date)
-    : [];
-
-  // 3. Filtrelenmiş amellerin ID'lerini çıkar
-  const deedIds = todaysDeeds.map((d) => d.deedId);
-
-  // 4. Bu ID'ler için Logları çek
-  const {
-    data: logs,
-    isLoading: isLoadingLogs,
-    refetch: refetchLogs,
-  } = useDailyLogs(date, deedIds);
-
-  // 5. Verileri Birleştir (UI için hazır hale getir)
-  // Her amelin yanına o günkü log durumunu ekle
-  const combinedData = todaysDeeds.map((deed) => {
-    const log = logs?.find((l: any) => l.deedId === deed.deedId);
-    return {
-      ...deed,
-      isCompleted: log?.isCompleted ?? 0,
-      logId: log?.id, // Update işlemi için lazım olabilir
-    };
+export const useEarliestActivityDate = () => {
+  return useQuery({
+    queryKey: ["first-date"],
+    queryFn: getEarliestActivityDate,
   });
+};
 
-  return {
-    data: combinedData,
-    isLoading: isLoadingDeeds || isLoadingLogs,
-    error: errorDeeds,
-    refetch: refetchLogs,
-  };
+export const usecalculateDeedTotalPoints = (deedId: number) => {
+  return useQuery({
+    queryKey: ["calculated-deed", deedId],
+    queryFn: () => calculateDeedTotalPoints(deedId),
+    enabled: !!deedId,
+  });
+};
+
+export const usegetDeedCompletedDates = (deedId: number) => {
+  return useQuery({
+    queryKey: ["deed-year-headmap", deedId],
+    queryFn: () => getDeedCompletedDates(deedId),
+    enabled: !!deedId,
+  });
+};
+
+export const useLibraryDashboard = (startDate: string, endDate: string) => {
+  const version = useSyncStore((s) => s.version);
+
+  return useQuery({
+    queryKey: ["library-dashboard", startDate, endDate, version],
+    queryFn: () => getLibraryDashboardData(startDate, endDate),
+    enabled: !!startDate && !!endDate,
+    staleTime: 1000 * 60 * 5, // 5 dakika cache
+  });
 };

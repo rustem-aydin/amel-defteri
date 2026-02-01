@@ -1,4 +1,3 @@
-// hooks/useTimeEngine.ts
 import {
   CalculationMethod,
   Coordinates,
@@ -72,7 +71,6 @@ const toTimeZone = (date: Date, timeZone: string) => {
   }
 };
 
-// Milisaniyeyi saate çevirir (HH:mm:ss)
 const formatMs = (ms: number) => {
   if (ms < 0) ms = 0;
   const totalSec = Math.floor(ms / 1000);
@@ -82,6 +80,7 @@ const formatMs = (ms: number) => {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 };
 
+// --- HOOK ---
 export const useTimeEngine = (coords: Coordinates | null | undefined) => {
   const references = useMemo(() => {
     if (!coords || !coords.latitude || !coords.longitude) return null;
@@ -132,6 +131,7 @@ export const useTimeEngine = (coords: Coordinates | null | undefined) => {
   return references;
 };
 
+// --- STATUS HESAPLAYICI ---
 export const getAmelStatus = (
   references: TimeRefs | null,
   startRef: string | null | undefined,
@@ -146,32 +146,24 @@ export const getAmelStatus = (
     };
   }
 
-  // 1. ŞU ANKİ ZAMANI HEDEF SAAT DİLİMİNE ÇEVİR (Fake UTC mantığı)
   const nowShifted = Date.now() + references.offset;
 
-  // HEDEF VE BİTİŞ REF'LERİ YOKSA (TÜM GÜN AMELİ)
   if (!startRef || !endRef) {
-    // nowShifted bir timestamp (sayı). Onu Date objesine çeviriyoruz.
     const endOfDay = new Date(nowShifted);
-
-    // DÜZELTME BURADA:
-    // setHours yerine setUTCHours kullanmalısın.
-    // Çünkü useTimeEngine'de toTimeZone fonksiyonun 'Date.UTC' kullanarak tarih oluşturdu.
-    // Artık o tarihler "sanal bir UTC" üzerinde yaşıyor.
     endOfDay.setUTCHours(23, 59, 59, 999);
 
     return {
       status: "all_day",
       text: formatMs(endOfDay.getTime() - nowShifted),
-      message: "Günün Bitimine:",
+      message: "Bitmesine:", // <-- BURASI GÜNCELLENDİ (Günün Bitimine -> Bitmesine)
       color: "#3B82F6",
     };
   }
 
+  // TypeScript Düzeltmesi: as keyof TimeRefs
   const startDate = references[startRef as keyof TimeRefs];
   const endDate = references[endRef as keyof TimeRefs];
 
-  // Veri güvenliği kontrolü
   if (!(startDate instanceof Date) || !(endDate instanceof Date)) {
     return {
       status: "error",
@@ -200,10 +192,11 @@ export const getAmelStatus = (
       color: "#10B981",
     };
   }
+
   return {
     status: "expired",
-    text: "00:00:00",
-    message: "Vakit Geçti",
+    text: "Vakit Geçti",
+    message: "",
     color: "#EF4444",
   };
 };

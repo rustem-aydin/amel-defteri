@@ -3,6 +3,8 @@ module.exports = function (api) {
   return {
     presets: ["babel-preset-expo"],
     plugins: [
+      "react-native-reanimated/plugin", // BU SATIR EN SONDA OLMALI
+
       ["inline-import", { extensions: [".sql"] }], // <-- Bunu ekle
     ],
   };

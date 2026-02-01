@@ -1,5 +1,8 @@
 const lightColors = {
   background: "#FFFFFF",
+  surahResources: "#FF8787",
+  hadithResources: "#B6E2A1",
+  othersResources: "#FFFBC1",
   foreground: "#09090b",
   card: "#FFFFFF", // Düzeltildi: Açık temada kart beyaz olmalı
   cardBorder: "#e4e4e7", // Düzeltildi
@@ -48,6 +51,9 @@ const lightColors = {
 };
 
 const darkColors = {
+  surahResources: "#FF8787",
+  hadithResources: "#B6E2A1",
+  othersResources: "#FFFBC1",
   background: "#050F08",
   foreground: "#FFFFFF",
   card: "#0A1A10",
