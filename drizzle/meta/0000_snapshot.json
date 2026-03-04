@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c9f7f3c6-38da-4818-adaf-3a6cfcabf550",
+  "id": "2f295d4e-d4af-4411-be11-b30479f05028",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "daily_logs": {
@@ -21,11 +21,18 @@
           "notNull": false,
           "autoincrement": false
         },
-        "date": {
-          "name": "date",
+        "date_hijri": {
+          "name": "date_hijri",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "date_gregorian": {
+          "name": "date_gregorian",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
           "autoincrement": false
         },
         "is_intended": {
@@ -54,18 +61,25 @@
         }
       },
       "indexes": {
-        "idx_daily_logs_deed_date": {
-          "name": "idx_daily_logs_deed_date",
+        "idx_daily_logs_deed_date_hijri": {
+          "name": "idx_daily_logs_deed_date_hijri",
           "columns": [
             "deed_id",
-            "date"
+            "date_hijri"
           ],
           "isUnique": true
         },
-        "idx_daily_logs_date": {
-          "name": "idx_daily_logs_date",
+        "idx_daily_logs_date_hijri": {
+          "name": "idx_daily_logs_date_hijri",
           "columns": [
-            "date"
+            "date_hijri"
+          ],
+          "isUnique": false
+        },
+        "idx_daily_logs_date_gregorian": {
+          "name": "idx_daily_logs_date_gregorian",
+          "columns": [
+            "date_gregorian"
           ],
           "isUnique": false
         }
@@ -478,19 +492,49 @@
           "notNull": true,
           "autoincrement": false
         },
-        "added_at": {
-          "name": "added_at",
+        "added_at_hijri": {
+          "name": "added_at_hijri",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "removed_at": {
-          "name": "removed_at",
+        "removed_at_hijri": {
+          "name": "removed_at_hijri",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "added_at_gregorian": {
+          "name": "added_at_gregorian",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "removed_at_gregorian": {
+          "name": "removed_at_gregorian",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "level": {
+          "name": "level",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": 1
+        },
+        "last_milestone": {
+          "name": "last_milestone",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": 0
         },
         "target_count": {
           "name": "target_count",
@@ -509,17 +553,17 @@
           ],
           "isUnique": true
         },
-        "idx_user_deeds_added_at": {
-          "name": "idx_user_deeds_added_at",
+        "idx_user_deeds_added_at_hijri": {
+          "name": "idx_user_deeds_added_at_hijri",
           "columns": [
-            "added_at"
+            "added_at_hijri"
           ],
           "isUnique": false
         },
-        "idx_user_deeds_removed_at": {
-          "name": "idx_user_deeds_removed_at",
+        "idx_user_deeds_removed_at_hijri": {
+          "name": "idx_user_deeds_removed_at_hijri",
           "columns": [
-            "removed_at"
+            "removed_at_hijri"
           ],
           "isUnique": false
         }
@@ -539,40 +583,6 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "user_profile": {
-      "name": "user_profile",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        },
-        "total_points": {
-          "name": "total_points",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": 0
-        },
-        "level": {
-          "name": "level",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false,
-          "default": 1
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}

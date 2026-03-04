@@ -5,23 +5,33 @@ import React, { useCallback } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 
 import { useDeedLogic } from "@/hooks/useDeedLogic";
+import { useColors } from "@/theme/useColors"; // ✅ Eklendi
 import { DeedActionButton } from "./DeedActionButton";
 import { DeedBadge } from "./DeedBadge";
 import { DeedInfo } from "./DeedInfo";
 
-export const DeedCard = React.memo(({ item, references }: any) => {
+export const DeedCard = React.memo(({ item, engine, displayDate }: any) => {
   const router = useRouter();
+  const { card } = useColors(); // ✅ Renkleri al
+
   const {
-    containerStyle,
     status,
     points,
     isButtonActive,
     themeColor,
     isDone,
     isPastDate,
+    isFutureDate, // ✅
     viewMode,
     green,
-  } = useDeedLogic(item, references);
+  } = useDeedLogic(item, engine, displayDate);
+
+  const containerStyle = {
+    backgroundColor: card,
+    borderColor: isDone ? green : withOpacity(green, 0.3),
+    borderWidth: isDone ? 1.5 : 1,
+    opacity: 1,
+  };
 
   const handlePress = useCallback(() => {
     if (item?.deedId) router.push(`/deed/${item.deedId}`);
@@ -42,19 +52,21 @@ export const DeedCard = React.memo(({ item, references }: any) => {
         points={points}
         level={item.level}
         color={green}
+        isDone={isDone}
+        isFutureDate={isFutureDate} // ✅
       />
 
       <DeedInfo
         item={item}
         viewMode={viewMode}
         isPastDate={isPastDate}
+        isFutureDate={isFutureDate} // ✅
         isDone={isDone}
         status={status}
         themeColor={themeColor}
-        references={references}
+        engine={engine}
       />
 
-      {/* Sağ Aksiyon Butonu */}
       <View
         style={{
           opacity: isButtonActive && !isPastDate ? 1 : 0.8,
@@ -67,6 +79,7 @@ export const DeedCard = React.memo(({ item, references }: any) => {
           status={status}
           isCompleted={isDone}
           disabled={!isButtonActive}
+          hijriDate={displayDate}
         />
       </View>
     </TouchableOpacity>

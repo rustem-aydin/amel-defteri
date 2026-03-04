@@ -1,12 +1,14 @@
 import { db } from "@/db/client";
-import { addToUserDeeds, removeFromUserDeeds } from "@/db/repos/allMutations";
+import { addToUserDeeds, removeFromUserDeeds, toggleDeedCompletion } from "@/db/repos/allMutations";
 import { dailyLogs, userDeeds } from "@/db/schema";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { and, eq, sql } from "drizzle-orm";
 import { getDeedStreak } from "../repos/allRequest";
+import { useSyncStore } from "@/store/useSyncStore";
 
 export const useToggleDeed = () => {
   const queryClient = useQueryClient();
+  const bumpVersion = useSyncStore((s) => s.bumpVersion);
 
   return useMutation({
     mutationFn: async ({
@@ -25,59 +27,81 @@ export const useToggleDeed = () => {
       }
     },
 
+    // 🚀 OPTIMISTIC UPDATE - UI anında güncellenir
+    onMutate: async ({ deedId, isAdded }) => {
+      await queryClient.cancelQueries({ queryKey: ["deeds"] });
+
+      const previousDeeds = queryClient.getQueryData(["deeds"]);
+
+      // Cache'deki veriyi hemen güncelle
+      queryClient.setQueriesData(
+        { queryKey: ["deeds"] },
+        (old: any) => {
+          if (!old) return old;
+          return old.map((deed: any) =>
+            deed.id === deedId
+              ? { ...deed, isAdded: isAdded ? 0 : 1 } // Toggle
+              : deed
+          );
+        }
+      );
+
+      return { previousDeeds };
+    },
+
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["deeds"] });
-      queryClient.invalidateQueries({ queryKey: ["daily-plan"] });
-      queryClient.invalidateQueries({ queryKey: ["user-deeds"] });
+      // 🔄 Version'ı artır
+      bumpVersion();
+
+      // 🔥 ANINDA REFETCH
+      queryClient.refetchQueries({ queryKey: ["deeds"] });
+      queryClient.refetchQueries({ queryKey: ["daily-plan"] });
+      queryClient.refetchQueries({ queryKey: ["user-deeds"] });
+    },
+
+    // Hata durumunda geri al
+    onError: (err, variables, context) => {
+      if (context?.previousDeeds) {
+        queryClient.setQueryData(["deeds"], context.previousDeeds);
+      }
+      console.error("Amel ekleme/çıkarma hatası:", err);
     },
   });
 };
 
+/**
+ * 🌙 HİCRİ TAKVİM VERSİYONU
+ * Artık date yerine hijriDate kullanıyor
+ */
 export const useToggleDailyLog = () => {
   const queryClient = useQueryClient();
+  const bumpVersion = useSyncStore((s) => s.bumpVersion);
 
   return useMutation({
     mutationFn: async ({
       deedId,
-      date,
+      hijriDate,
       currentStatus,
       points,
     }: {
       deedId: number;
-      date: string;
+      hijriDate: string;
       currentStatus: boolean;
       points: number;
     }) => {
-      if (currentStatus) {
-        await db
-          .update(dailyLogs)
-          .set({ isCompleted: 0, earnedPoints: 0 })
-          .where(and(eq(dailyLogs.deedId, deedId), eq(dailyLogs.date, date)));
-      } else {
-        // TİK AT
-        await db
-          .insert(dailyLogs)
-          .values({
-            deedId,
-            date,
-            isCompleted: 1,
-            earnedPoints: points,
-            isIntended: 1,
-          })
-          .onConflictDoUpdate({
-            target: [dailyLogs.deedId, dailyLogs.date],
-            set: { isCompleted: 1, earnedPoints: points },
-          });
+      console.log(`🔘 [MUTATION START] Deed: ${deedId}, Date: ${hijriDate}, OldStatus: ${currentStatus} -> New: ${!currentStatus}`);
 
-        // --- 2. STREAK VE LEVEL KONTROLÜ (Sadece Tik Atıldığında) ---
-        // Yeni streak durumunu hesapla
+      // ✅ toggleDeedCompletion kullan (Hicri + dual-date insert yapar)
+      await toggleDeedCompletion(deedId, hijriDate, !currentStatus, points);
+
+      console.log(`✅ [MUTATION DB DONE] Deed: ${deedId} işlemi tamamlandı.`);
+
+      // Streak ve level kontrolü (sadece tik atıldığında)
+      if (!currentStatus) {
         const newStreak = await getDeedStreak(deedId);
-
-        // 21 ve katlarını bul (21, 42, 63...)
         const milestoneReached = Math.floor(newStreak / 21) * 21;
 
         if (milestoneReached > 0) {
-          // Bu barem daha önce geçilmediyse Level'ı artır
           await db
             .update(userDeeds)
             .set({
@@ -93,23 +117,28 @@ export const useToggleDailyLog = () => {
         }
       }
 
-      return { deedId, date, newStatus: !currentStatus, points };
+      return { deedId, hijriDate, newStatus: !currentStatus, points };
     },
 
-    onMutate: async ({ deedId, date, currentStatus, points }) => {
-      await queryClient.cancelQueries({ queryKey: ["daily-plan", date] });
+    onMutate: async ({ deedId, hijriDate, currentStatus, points }) => {
+      await queryClient.cancelQueries({ queryKey: ["daily-plan", hijriDate] });
       await queryClient.cancelQueries({ queryKey: ["total-points"] });
 
-      const previousPlan = queryClient.getQueryData(["daily-plan", date]);
+      const previousPlan = queryClient.getQueryData(["daily-plan", hijriDate]);
       const previousPoints = queryClient.getQueryData(["total-points"]);
 
       queryClient.setQueryData(
-        ["daily-plan", date],
+        ["daily-plan", hijriDate],
         (old: any[] | undefined) => {
           if (!old) return [];
           return old.map((item) =>
             item.deedId === deedId
-              ? { ...item, isCompleted: !currentStatus ? 1 : 0 }
+              ? {
+                  ...item,
+                  isCompleted: !currentStatus ? 1 : 0,
+                  // Puanları da optimistik olarak güncelle
+                  earnedPoints: !currentStatus ? points : 0
+                }
               : item,
           );
         },
@@ -125,9 +154,10 @@ export const useToggleDailyLog = () => {
 
     // Hata durumunda UI'ı eski veriye geri döndür
     onError: (err, variables, context) => {
+      console.error("❌ [MUTATION ERROR]", err);
       if (context) {
         queryClient.setQueryData(
-          ["daily-plan", variables.date],
+          ["daily-plan", variables.hijriDate],
           context.previousPlan,
         );
         queryClient.setQueryData(["total-points"], context.previousPoints);
@@ -135,17 +165,15 @@ export const useToggleDailyLog = () => {
       console.error("İşlem başarısız:", err);
     },
 
-    // Her durumda veriyi arka planda tazele
-    onSettled: (data, error, variables) => {
-      // Günlük planı ve streak bilgisini invalidate et (arka planda güncellensinler)
-      queryClient.invalidateQueries({
-        queryKey: ["daily-plan", variables.date],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["deed-streak", variables.deedId],
-      });
-      // Seviye bilgisini içeren user-deeds listesini de tazele
-      queryClient.invalidateQueries({ queryKey: ["user-deeds"] });
+    onSuccess: () => {
+      // 🔄 Version'ı artır
+      bumpVersion();
+
+      // 🔥 ANINDA REFETCH - invalidate yerine refetch kullan
+      queryClient.refetchQueries({ queryKey: ["daily-plan"] });
+      queryClient.refetchQueries({ queryKey: ["total-points"] });
+      queryClient.refetchQueries({ queryKey: ["deed-streak"] });
+      queryClient.refetchQueries({ queryKey: ["user-deeds"] });
     },
   });
 };

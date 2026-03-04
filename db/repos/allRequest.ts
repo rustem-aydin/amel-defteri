@@ -10,6 +10,7 @@ import {
   userDeeds,
 } from "@/db/schema";
 import { getDateAttributes, isValidForPeriod } from "@/helpers/dateUtils";
+import { addHijriDays, getCurrentHijriDate, parseHijriDate, formatHijriDateShort } from "@/helpers/hijriUtils";
 import {
   and,
   asc,
@@ -56,7 +57,7 @@ export const getDeeds = async (filters: DeedFilters = {}) => {
     .leftJoin(deedPeriods, eq(deeds.periodId, deedPeriods.id))
     .leftJoin(
       userDeeds,
-      and(eq(deeds.id, userDeeds.deedId), isNull(userDeeds.removedAt)),
+      and(eq(deeds.id, userDeeds.deedId), isNull(userDeeds.removedAtHijri)),
     )
     .orderBy(desc(deeds.createdAt))
     .$dynamic();
@@ -90,7 +91,7 @@ export const getDeed = async (deedId: number) => {
       title: deeds.title,
       description: deeds.description,
       virtueText: deeds.virtueText,
-      intentionPoints: deeds.intentionPoints,
+      // intentionPoints kaldırıldı
       deedPoints: deeds.deedPoints,
       statusName: deedStatuses.name,
       colorCode: deedStatuses.colorCode,
@@ -100,16 +101,19 @@ export const getDeed = async (deedId: number) => {
 
       // ✅ Kullanıcıya özel bilgiler (user_deeds tablosundan)
       level: userDeeds.level,
-      addedAt: userDeeds.addedAt,
+      addedAtHijri: userDeeds.addedAtHijri,
       // Amel listede mi? (user_deeds kaydı varsa ve silinmemişse true döner)
-      isAdded: sql<boolean>`CASE WHEN ${userDeeds.id} IS NOT NULL AND ${userDeeds.removedAt} IS NULL THEN 1 ELSE 0 END`,
+      isAdded: sql<boolean>`CASE WHEN ${userDeeds.id} IS NOT NULL AND ${userDeeds.removedAtHijri} IS NULL THEN 1 ELSE 0 END`,
     })
     .from(deeds)
     .leftJoin(deedStatuses, eq(deeds.statusId, deedStatuses.id))
     .leftJoin(deedCategories, eq(deeds.categoryId, deedCategories.id))
     .leftJoin(deedPeriods, eq(deeds.periodId, deedPeriods.id))
-    // ✅ user_deeds bağlantısı
-    .leftJoin(userDeeds, eq(deeds.id, userDeeds.deedId))
+    // ✅ user_deeds bağlantısı - KRİTİK: removedAtHijri kontrolü ekle!
+    .leftJoin(
+      userDeeds,
+      and(eq(deeds.id, userDeeds.deedId), isNull(userDeeds.removedAtHijri))
+    )
     .where(eq(deeds.id, deedId))
     .get();
 
@@ -164,16 +168,16 @@ export const getDeedResources = async (deedId: number) => {
 // 2. KULLANICI VE TAKVİM İŞLEMLERİ (OPTIMIZED)
 // ==========================================
 
-export const getUserDeeds = async (date: string) => {
-  const { tags } = getDateAttributes(date);
+export const getUserDeeds = async (hijriDate: string) => {
+  const { tags } = getDateAttributes(hijriDate);
 
   return await db
     .select({
       userDeedId: userDeeds.id,
       level: userDeeds.level,
       targetCount: userDeeds.targetCount,
-      addedAt: userDeeds.addedAt,
-      removedAt: userDeeds.removedAt,
+      addedAtHijri: userDeeds.addedAtHijri,
+      removedAtHijri: userDeeds.removedAtHijri,
 
       deedId: deeds.id,
       title: deeds.title,
@@ -181,7 +185,7 @@ export const getUserDeeds = async (date: string) => {
       virtueText: deeds.virtueText,
       startRef: deeds.startRef,
       endRef: deeds.endRef,
-      intentionPoints: deeds.intentionPoints,
+      // intentionPoints kaldırıldı
       deedPoints: deeds.deedPoints,
 
       periodCode: deedPeriods.code,
@@ -190,7 +194,7 @@ export const getUserDeeds = async (date: string) => {
       statusColor: deedStatuses.colorCode,
 
       logId: dailyLogs.id,
-      isIntended: dailyLogs.isIntended,
+      // isIntended kaldırıldı
       isCompleted: dailyLogs.isCompleted,
       earnedPoints: dailyLogs.earnedPoints,
     })
@@ -199,22 +203,22 @@ export const getUserDeeds = async (date: string) => {
     .leftJoin(deedPeriods, eq(deeds.periodId, deedPeriods.id))
     .leftJoin(deedCategories, eq(deeds.categoryId, deedCategories.id))
     .leftJoin(deedStatuses, eq(deeds.statusId, deedStatuses.id))
-    // O gün için bir kayıt var mı diye bakıyoruz
+    // O gün için bir kayıt var mı diye bakıyoruz (HİCRİ TARİH)
     .leftJoin(
       dailyLogs,
-      and(eq(dailyLogs.deedId, deeds.id), eq(dailyLogs.date, date)),
+      and(eq(dailyLogs.deedId, deeds.id), eq(dailyLogs.dateHijri, hijriDate)),
     )
     .where(
       and(
-        // 1. Günün anlamına uygun periyotları getir (Örn: Cuma ise hem DAILY hem WEEKLY_FRI)
+        // 1. Günün anlamına uygun periyotları getir
         inArray(deedPeriods.code, tags),
 
-        // 2. Amel, sorgulanan tarihten önce veya o tarihte eklenmiş olmalı
-        lte(userDeeds.addedAt, date),
+        // 2. Amel, sorgulanan Hicri tarihten önce veya o tarihte eklenmiş olmalı
+        lte(userDeeds.addedAtHijri, hijriDate),
 
         or(
-          isNull(userDeeds.removedAt), // Halen listede
-          gt(userDeeds.removedAt, date), // O tarihte listedeydi ama sonra silindi
+          isNull(userDeeds.removedAtHijri), // Halen listede
+          gt(userDeeds.removedAtHijri, hijriDate), // O tarihte listedeydi ama sonra silindi
           isNotNull(dailyLogs.id), // Silinmiş olsa bile o gün tamamlanmışsa göster
         ),
       ),
@@ -222,12 +226,12 @@ export const getUserDeeds = async (date: string) => {
     .orderBy(deeds.id);
 };
 
-export const getDailyLogs = async (date: string, deedIds: number[]) => {
+export const getDailyLogs = async (hijriDate: string, deedIds: number[]) => {
   if (deedIds.length === 0) return [];
   return await db
     .select()
     .from(dailyLogs)
-    .where(and(eq(dailyLogs.date, date), inArray(dailyLogs.deedId, deedIds)));
+    .where(and(eq(dailyLogs.dateHijri, hijriDate), inArray(dailyLogs.deedId, deedIds)));
 };
 
 export const getDeedHistory = async (deedId: number) => {
@@ -235,22 +239,27 @@ export const getDeedHistory = async (deedId: number) => {
     .select()
     .from(dailyLogs)
     .where(eq(dailyLogs.deedId, deedId))
-    .orderBy(desc(dailyLogs.date));
+    .orderBy(desc(dailyLogs.dateHijri));
 };
 
 export const getDeedStatus = async (deedId: number) => {
   const userRecord = await db
     .select({ id: userDeeds.id })
     .from(userDeeds)
-    .where(and(eq(userDeeds.deedId, deedId), isNull(userDeeds.removedAt)))
+    .where(and(eq(userDeeds.deedId, deedId), isNull(userDeeds.removedAtHijri)))
     .get();
   return !!userRecord;
 };
 
 export const calculateTotalPoints = async () => {
+  const { year } = parseHijriDate(getCurrentHijriDate());
+  const startStr = `${year}-01-01`;
+  const endStr = `${year}-12-30`;
+
   const result = await db
     .select({ total: sum(dailyLogs.earnedPoints) })
-    .from(dailyLogs);
+    .from(dailyLogs)
+    .where(between(dailyLogs.dateHijri, startStr, endStr));
   return Number(result[0]?.total) || 0;
 };
 
@@ -265,45 +274,44 @@ export const getDeedStreak = async (deedId: number) => {
   const targetCode = deedInfo?.periodCode || "DAILY";
 
   const logs = await db
-    .select({ date: dailyLogs.date })
+    .select({ dateHijri: dailyLogs.dateHijri })
     .from(dailyLogs)
     .where(and(eq(dailyLogs.deedId, deedId), eq(dailyLogs.isCompleted, 1)))
-    .orderBy(desc(dailyLogs.date));
+    .orderBy(desc(dailyLogs.dateHijri));
 
-  const completedDates = new Set(logs.map((l) => l.date));
+  const completedDates = new Set(logs.map((l) => l.dateHijri));
 
   let streak = 0;
-  let checkDate = new Date();
+  let currentHijri = getCurrentHijriDate();
   let validDaysFound = 0;
   let safetyLimit = 730;
 
   while (validDaysFound < 21 && safetyLimit > 0) {
     safetyLimit--;
-    const dateStr = checkDate.toISOString().split("T")[0];
 
-    if (isValidForPeriod(checkDate, targetCode)) {
-      if (completedDates.has(dateStr)) {
+    if (isValidForPeriod(currentHijri, targetCode)) {
+      if (completedDates.has(currentHijri)) {
         streak++;
       } else {
         if (validDaysFound !== 0) break;
       }
       validDaysFound++;
     }
-    checkDate.setDate(checkDate.getDate() - 1);
+    currentHijri = addHijriDays(currentHijri, -1);
   }
   return streak;
 };
 
 export const getEarliestActivityDate = async () => {
   const firstLog = await db
-    .select({ date: min(dailyLogs.date) })
+    .select({ dateHijri: min(dailyLogs.dateHijri) })
     .from(dailyLogs)
     .get();
   const firstDeed = await db
-    .select({ date: min(userDeeds.addedAt) })
+    .select({ addedAtHijri: min(userDeeds.addedAtHijri) })
     .from(userDeeds)
     .get();
-  return firstLog?.date || firstDeed?.date || null;
+  return firstLog?.dateHijri || firstDeed?.addedAtHijri || null;
 };
 
 export const calculateDeedTotalPoints = async (deedId: number) => {
@@ -320,41 +328,43 @@ export const calculateDeedTotalPoints = async (deedId: number) => {
 
 // db/queries.ts
 export const getDeedCompletedDates = async (deedId: number) => {
-  const year = new Date().getFullYear();
-  const startStr = `${year}-01-01`;
-  const endStr = `${year}-12-31`;
+  // Hicri yıl bazlı - şu anki Hicri yılın tüm günleri
+  const currentHijri = getCurrentHijriDate();
+  const { year } = parseHijriDate(currentHijri);
+
+  const startStr = `${year}-01-01`; // Muharrem 1
+  const endStr = `${year}-12-30`; // Zilhicce 30 (max)
 
   const logs = await db
-    .select({ date: dailyLogs.date })
+    .select({ dateHijri: dailyLogs.dateHijri })
     .from(dailyLogs)
     .where(
       and(
         eq(dailyLogs.deedId, deedId),
         eq(dailyLogs.isCompleted, 1),
-        between(dailyLogs.date, startStr, endStr),
+        between(dailyLogs.dateHijri, startStr, endStr),
       ),
     );
 
-  return new Set(logs.map((l) => l.date));
+  return new Set(logs.map((l) => l.dateHijri));
 };
 
 export const getLibraryDashboardData = async (
-  startDate: string,
-  endDate: string,
+  startHijri: string,
+  endHijri: string,
 ) => {
-  // Performans: Tüm sorguları tek bir Promise.all içinde paralel başlatıyoruz.
-  // Bu, SQLite bekleme sürelerini (IO) minimize eder.
+  // Performans: Tüm sorguları paralel çalıştırıyoruz
   const [chartResults, categoryStats, summary] = await Promise.all([
-    // 1. Sorgu: Grafik için günlük toplamlar (Sadece gerekli sütunlar)
+    // 1. Sorgu: Grafik için günlük toplamlar (HİCRİ)
     db
       .select({
-        date: dailyLogs.date,
+        dateHijri: dailyLogs.dateHijri,
         total: sql<number>`CAST(SUM(${dailyLogs.earnedPoints}) AS INTEGER)`,
       })
       .from(dailyLogs)
-      .where(between(dailyLogs.date, startDate, endDate))
-      .groupBy(dailyLogs.date)
-      .orderBy(asc(dailyLogs.date)),
+      .where(between(dailyLogs.dateHijri, startHijri, endHijri))
+      .groupBy(dailyLogs.dateHijri)
+      .orderBy(asc(dailyLogs.dateHijri)),
 
     // 2. Sorgu: En iyi 5 kategori
     db
@@ -366,7 +376,7 @@ export const getLibraryDashboardData = async (
       .orderBy(desc(sql`SUM(${dailyLogs.earnedPoints})`))
       .limit(5),
 
-    // 3. Sorgu: Genel özet (Tüm zamanlar veya seçili aralık)
+    // 3. Sorgu: Genel özet
     db
       .select({
         totalPoints: sql<number>`CAST(SUM(${dailyLogs.earnedPoints}) AS INTEGER)`,
@@ -377,17 +387,13 @@ export const getLibraryDashboardData = async (
       .get(),
   ]);
 
-  // NaN HATASI İÇİN PERFORMANSLI NORMALİZASYON
-  // JS'de döngü sayısını azaltmak için direkt sonuç üzerinden map yapıyoruz.
+  // Grafik verilerini formatla
   const chartData = chartResults.map((r, i) => ({
     x: i,
     y: r.total || 0,
-    label: r.date?.split("-").reverse().slice(0, 2).join("/") || "", // "20-05" formatı (JS Date nesnesinden daha hızlıdır)
+    label: formatHijriDateShort(r.dateHijri || ""), // "22 Şab"
   }));
 
-  // Grafik kütüphanesinin (length - 1) formülü için güvenlik:
-  // Eğer 0 veya 1 veri varsa, sahte veri eklemek yerine boş bir dizi yerine
-  // stabil bir fallback dönüyoruz.
   const safeChartData =
     chartData.length > 1
       ? chartData

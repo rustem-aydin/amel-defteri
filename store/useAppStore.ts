@@ -1,4 +1,4 @@
-import { format } from "date-fns";
+import { getCurrentHijriDate } from "@/helpers/hijriUtils";
 import { create } from "zustand";
 
 export type ViewMode = "info" | "time" | "level";
@@ -13,8 +13,9 @@ export interface FilterState {
 }
 
 interface AppState {
-  // Global App State
-  selectedDate: string;
+  // 🌙 Global App State (HİCRİ TARİH)
+  selectedHijriDate: string; // "1446-08-22" formatında
+  effectiveHijriToday: string; // Akşam sonrası bir sonraki Hicri gün
   viewMode: ViewMode;
   isFilterOpen: boolean;
 
@@ -22,7 +23,8 @@ interface AppState {
   filters: FilterState;
 
   // Actions
-  setSelectedDate: (date: string) => void;
+  setSelectedHijriDate: (hijriDate: string) => void;
+  setEffectiveHijriToday: (hijriDate: string) => void;
   goToToday: () => void;
   setViewMode: (mode: ViewMode) => void;
   toggleFilterModal: () => void;
@@ -41,15 +43,18 @@ const initialFilters: FilterState = {
   isLiveOnly: false,
 };
 
-export const useAppStore = create<AppState>((set) => ({
-  selectedDate: format(new Date(), "yyyy-MM-dd"),
+export const useAppStore = create<AppState>((set, get) => ({
+  // Başlangıç: Bugünün Hicri tarihi
+  selectedHijriDate: getCurrentHijriDate(),
+  effectiveHijriToday: getCurrentHijriDate(),
   viewMode: "info",
   isFilterOpen: false,
 
   filters: initialFilters,
 
-  setSelectedDate: (date) => set({ selectedDate: date }),
-  goToToday: () => set({ selectedDate: format(new Date(), "yyyy-MM-dd") }),
+  setSelectedHijriDate: (hijriDate) => set({ selectedHijriDate: hijriDate }),
+  setEffectiveHijriToday: (hijriDate) => set({ effectiveHijriToday: hijriDate }),
+  goToToday: () => set({ selectedHijriDate: get().effectiveHijriToday }),
   setViewMode: (mode) => set({ viewMode: mode }),
   toggleFilterModal: () =>
     set((state) => ({ isFilterOpen: !state.isFilterOpen })),

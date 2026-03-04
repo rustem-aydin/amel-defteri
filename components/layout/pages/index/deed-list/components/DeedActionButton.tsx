@@ -1,7 +1,6 @@
 import { useToggleDailyLog } from "@/db/hooks/useAllMutations";
-import { useAppStore } from "@/store/useAppStore";
+import { compareHijriDates, getCurrentHijriDate } from "@/helpers/hijriUtils";
 import { useColor } from "@/theme/useColor";
-import { addDays, isAfter, parseISO } from "date-fns";
 import { Check, Lock } from "lucide-react-native";
 import React, { useCallback, useMemo } from "react";
 import { StyleSheet, TouchableOpacity } from "react-native";
@@ -13,6 +12,7 @@ interface DeedActionProps {
   deedId: number;
   disabled?: boolean;
   imsakTime?: string;
+  hijriDate: string;
 }
 
 export const DeedActionButton = React.memo(
@@ -23,48 +23,69 @@ export const DeedActionButton = React.memo(
     deedId,
     disabled: externalDisabled,
     imsakTime = "04:30",
+    hijriDate,
   }: DeedActionProps) => {
-    const selectedDate = useAppStore((s) => s.selectedDate);
+    // 🌙 HİCRİ TARİH: Artık dışarıdan (karttan) gelen tarihi kullanıyoruz
+    // Eğer prop gelmezse (undefined ise) bugünü varsay (Güvenlik)
+    const todayHijri = getCurrentHijriDate();
+    const selectedHijriDate = hijriDate || todayHijri;
 
     const activeColor = useColor("active");
 
     const { mutate: toggleLog, isPending } = useToggleDailyLog();
 
-    const isExpired = useMemo(() => {
-      const now = new Date();
-      const todayStr = now.toISOString().split("T")[0];
+    const { isExpired, isLocked } = useMemo(() => {
+      // selectedHijriDate zaten yukarıda tanımlı (todayHijri veya prop)
+      // Ancak compareHijriDates'in hata vermemesi için tekrar kontrol ediyoruz
+      if (!selectedHijriDate) return { isExpired: false, isLocked: false };
 
-      if (selectedDate > todayStr) return false;
-      if (selectedDate === todayStr) return false;
+      const comparison = compareHijriDates(selectedHijriDate, todayHijri);
 
-      const [h, m] = imsakTime.split(":").map(Number);
-      const deadline = addDays(parseISO(selectedDate), 1);
-      deadline.setHours(h, m, 0, 0);
+      // 1. Gelecek Tarih Kilidi (Yarın ve sonrası işaretlenemez)
+      // ❌ İPTAL: Time Engine zaten vakti gelmemişse "future" veriyor.
+      // Eğer akşam ezanı okunduysa ve yatsı "active" ise, tarih yarın olsa bile açık olmalı.
+      // if (comparison > 0) {
+      //   return { isExpired: false, isLocked: true };
+      // }
 
-      return isAfter(now, deadline);
-    }, [selectedDate, imsakTime]);
+      // 2. Vakit Kilidi (Henüz vakti gelmemişse kilitli)
+      // "future" status'u, vakti henüz gelmemiş (not_started) amelleri temsil eder
+      if (
+        status === "future" ||
+        status === "not_started" ||
+        status === "locked"
+      ) {
+        return { isExpired: false, isLocked: true };
+      }
+
+      // 3. Geçmiş Tarih Kontrolü (24 saat geçtiyse kilitli)
+      if (comparison < 0) {
+        return { isExpired: true, isLocked: true };
+      }
+
+      return { isExpired: false, isLocked: false };
+    }, [selectedHijriDate, status]);
 
     const isCompletedBool = !!isCompleted;
-
-    const isLocked =
-      status === "not_started" ||
-      status === "locked" ||
-      (isExpired && !isCompletedBool);
-
-    const isDisabled = isPending || isLocked || externalDisabled;
+    const isDisabled =
+      isPending || isLocked || externalDisabled;
 
     // UI Stil belirlemeleri
     let Icon = null;
     let btnStyle: any = {};
 
-    if (isCompletedBool) {
+    if (isExpired) {
+      // Geçmiş tarih: Her zaman kilit (tamamlanmış olsa bile)
+      Icon = <Lock size={16} color="#9CA3AF" />;
+      btnStyle = styles.btnDisabled;
+    } else if (isCompletedBool) {
       Icon = <Check size={24} color="#FFF" strokeWidth={3} />;
       btnStyle = {
-        backgroundColor: isExpired ? "#9CA3AF" : activeColor,
-        borderColor: isExpired ? "#9CA3AF" : activeColor,
+        backgroundColor: activeColor,
+        borderColor: activeColor,
         borderWidth: 2,
       };
-    } else if (isLocked) {
+    } else if (isLocked || (externalDisabled && !isPending)) {
       Icon = <Lock size={16} color="#9CA3AF" />;
       btnStyle = styles.btnDisabled;
     } else {
@@ -79,11 +100,18 @@ export const DeedActionButton = React.memo(
       if (isDisabled) return;
       toggleLog({
         deedId,
-        date: selectedDate,
+        hijriDate: selectedHijriDate, // 🌙 HİCRİ TARİH
         points,
         currentStatus: isCompletedBool,
       });
-    }, [deedId, selectedDate, points, isCompletedBool, isDisabled, toggleLog]);
+    }, [
+      deedId,
+      selectedHijriDate,
+      points,
+      isCompletedBool,
+      isDisabled,
+      toggleLog,
+    ]);
 
     return (
       <TouchableOpacity

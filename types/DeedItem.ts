@@ -6,7 +6,6 @@ export interface DeedItem {
 
   // ✅ DÜZELTME: Veritabanından 'null' gelebileceği için '| null' ekledik
   deedPoints: number | null;
-  intentionPoints: number | null;
 
   startRef: string | null;
   endRef: string | null;

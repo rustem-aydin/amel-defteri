@@ -1,12 +1,11 @@
 import { useCalendarPreload, useDailyPlan } from "@/db/hooks/useAllQueries";
 import { useModeToggle } from "@/hooks/useModeToggle";
-import { useTimeEngine } from "@/hooks/useTimeEngine";
 import { useAppStore } from "@/store/useAppStore";
 import { useLocationStore } from "@/store/useLocationStore";
 import { Colors } from "@/theme/colors";
 import { Spacing, Typography } from "@/theme/globals";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   StyleProp,
@@ -17,6 +16,8 @@ import {
   ViewStyle,
 } from "react-native";
 import { DeedItemsList } from "./components/DeedList";
+import { useTimeReferences } from "@/context/TimeEngineContext";
+import { compareHijriDates, getCurrentHijriDate } from "@/helpers/hijriUtils";
 
 interface DeedListSectionProps {
   ListHeaderComponent?: React.ReactElement | null;
@@ -32,13 +33,38 @@ export const DeedListSection = ({
 
   const [loading, setLoading] = useState(false);
 
-  const selectedDate = useAppStore((s) => s.selectedDate);
-  const { data: allDeeds = [] } = useDailyPlan(selectedDate);
-
+  // 🌙 HİCRİ TARİH KULLAN
+  const selectedHijriDate = useAppStore((s) => s.selectedHijriDate);
   const { coords, fetchLocation } = useLocationStore();
-  const references = useTimeEngine(coords);
 
-  useCalendarPreload(selectedDate);
+  // 1. Time Engine References'ı al
+  const engine = useTimeReferences();
+
+  // 2. 🌙 KRİTİK: Hangi Hicri günü sorgulayacağız?
+  const hijriDateToQuery = useMemo(() => {
+    // Varsayılan olarak bugünü al (Güvenlik)
+    const today = getCurrentHijriDate();
+    const targetDate = selectedHijriDate || today;
+
+    if (!engine) return targetDate;
+
+    // Kullanıcı bugünü seçmişse
+    const isToday = compareHijriDates(targetDate, engine.actualDateHijri) === 0;
+
+    if (isToday && engine.isPostMaghrib) {
+      // Akşam ezanı sonrası → Yarının Hicri planını getir
+      return engine.effectiveDateHijri;
+    }
+
+    return targetDate;
+  }, [selectedHijriDate, engine]);
+
+  console.log(`🎨 [UI RENDER] DeedListSection | StoreDate: ${selectedHijriDate} | PostMaghrib: ${engine?.isPostMaghrib} | QueryDate: ${hijriDateToQuery}`);
+
+  // 3. 🌙 Hicri tarih ile sorgu yap
+  const { data: allDeeds = [] } = useDailyPlan(hijriDateToQuery);
+
+  useCalendarPreload(selectedHijriDate);
 
   const handleGetLocation = async () => {
     setLoading(true);
@@ -81,8 +107,8 @@ export const DeedListSection = ({
   return (
     <DeedItemsList
       data={allDeeds}
-      references={references}
-      selectedDate={selectedDate}
+      engine={engine}
+      selectedHijriDate={hijriDateToQuery} // ✅ Düzeltildi: Gösterilen tarihi gönder
       ListHeaderComponent={ListHeaderComponent}
     />
   );

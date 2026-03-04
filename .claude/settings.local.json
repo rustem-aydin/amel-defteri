@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx drizzle-kit generate:*)",
+      "Bash(node:*)",
+      "Bash(npx tsc:*)",
+      "WebSearch",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:github.com)"
+    ]
+  },
+  "enabledPlugins": {
+    "expo-app-design@expo-plugins": true,
+    "upgrading-expo@expo-plugins": true,
+    "expo-deployment@expo-plugins": true
+  }
+}

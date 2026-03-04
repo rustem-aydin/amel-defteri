@@ -1,19 +1,17 @@
 import { Text } from "@/components/ui/text";
 import { useAppStore } from "@/store/useAppStore";
 import { useColors } from "@/theme/useColors";
-import { format } from "date-fns";
 import React from "react";
 import { StyleSheet, TouchableOpacity } from "react-native";
 
 const HeaderCalenderTodayButton = () => {
   const goToToday = useAppStore((s) => s.goToToday);
   const { active } = useColors();
-  const selectedDate = useAppStore((s) => s.selectedDate);
+  const selectedHijriDate = useAppStore((s) => s.selectedHijriDate);
+  const effectiveHijriToday = useAppStore((s) => s.effectiveHijriToday);
 
-  const todayStr = format(new Date(), "yyyy-MM-dd");
-  const isToday = selectedDate === todayStr;
+  const isToday = selectedHijriDate === effectiveHijriToday;
 
-  // Eğer zaten bugün seçiliyse butonu gösterme
   if (isToday) {
     return null;
   }
@@ -34,7 +32,7 @@ const styles = StyleSheet.create({
   todayBtn: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 4,
     marginRight: 2,
   },
   todayBtnText: {

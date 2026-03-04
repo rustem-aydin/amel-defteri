@@ -127,7 +127,7 @@ export const syncAllData = async () => {
           startRef: a.start_ref,
           endRef: a.end_ref,
           timeMask: a.kerahat_mask,
-          intentionPoints: a.puan_niyet,
+          // intentionPoints kaldırıldı
           deedPoints: a.puan_amel,
           categoryId: a.amel_kategori_id,
           statusId: a.amel_durumu_id,

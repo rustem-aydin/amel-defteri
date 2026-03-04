@@ -1,58 +1,98 @@
 import { Text } from "@/components/ui/text";
 import { View } from "@/components/ui/view";
-import { useDateInfo } from "@/hooks/useDateTags";
+import { useDateInfo } from "@/hooks/useDateInfo";
+import { useTimeReferences } from "@/context/TimeEngineContext";
 import { useAppStore } from "@/store/useAppStore";
-import { useColors } from "@/theme/useColors";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet } from "react-native";
+import { compareHijriDates, formatGregorianDate, hijriToGregorianString } from "@/helpers/hijriUtils";
 
-const HeaderHijriDate = () => {
-  const { textMuted } = useColors();
+const HeaderDate = () => {
+  const selectedHijriDate = useAppStore((s) => s.selectedHijriDate);
 
-  const selectedDate = useAppStore((s) => s.selectedDate);
+  const engine = useTimeReferences();
 
-  const { hijri, specialDayName, isSpecial } = useDateInfo(selectedDate);
+  // 🔴 DÜZELTME: Header artık SADECE seçili günü gösterir.
+  // TimeEngine'in "akşamdan sonra yarını gösterme" mantığı (effectiveDate)
+  // sadece namaz vakitleri ve geri sayım içindir.
+  // Takvimde seçilen gün neyse, başlıkta o yazmalıdır.
+
+  // Seçili tarih yoksa bugünün efektif Hicri tarihini baz al
+  const effectiveHijriToday = useAppStore((s) => s.effectiveHijriToday);
+  const displayDate = selectedHijriDate || effectiveHijriToday;
+
+  // Akşam modu (sadece bugün için özel ikon vs istenirse kullanılabilir)
+  // ama tarihi değiştirmemeli.
+  const isPostMaghrib =
+     engine && compareHijriDates(displayDate, engine.actualDateHijri) === 0
+       ? engine.isPostMaghrib
+       : false;
+
+  // Date Info Hook
+  const { hijri, specialDayName, isSpecial, dayLabel } = useDateInfo(
+    displayDate,
+    isPostMaghrib, // Bu sadece "Cuma Gecesi" gibi etiketleri etkiler, tarihi değil
+  );
+
+  // Miladi karşılığı
+  const gregorianDate = hijriToGregorianString(displayDate);
 
   return (
-    <View style={styles.leftSection}>
+    <View style={styles.container}>
+      {/* SATIR 1: HİCRİ TARİH (Büyük) */}
       <Text
         style={[styles.hijriText, { color: isSpecial ? "#d4af37" : "white" }]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
       >
         {hijri?.fullDate}
       </Text>
 
+      {/* SATIR 2: Gün ve Vakit + Miladi Tarih */}
+      <View style={styles.subRow}>
+        <Text style={styles.dayLabelText}>{dayLabel}</Text>
+        <Text style={styles.gregorianHint}> • {formatGregorianDate(gregorianDate).slice(0, 5)}</Text>
+      </View>
+
+      {/* SATIR 3: Özel Gün Badge */}
       {isSpecial && specialDayName && (
         <View style={styles.specialBadgeContainer}>
-          <Ionicons
-            name="sparkles"
-            size={10}
-            color="#fff"
-            style={{ marginRight: 4 }}
-          />
-          <Text style={styles.specialBadgeText} numberOfLines={1}>
-            {specialDayName}
-          </Text>
+          <Ionicons name="sparkles" size={10} color="#fff" />
+          <Text style={styles.specialBadgeText}>{specialDayName}</Text>
         </View>
       )}
     </View>
   );
 };
 
-export default HeaderHijriDate;
+export default HeaderDate;
+
 const styles = StyleSheet.create({
-  leftSection: {
+  container: {
     flex: 1,
     flexDirection: "column",
     justifyContent: "center",
     alignItems: "flex-start",
-    marginRight: 10,
+    paddingLeft: 4,
   },
   hijriText: {
-    fontSize: 15,
-    fontWeight: "bold",
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: -0.5,
+  },
+  subRow: {
+    flexDirection: "row",
+    marginTop: -2,
+    alignItems: "center",
+  },
+  dayLabelText: {
+    color: "#A0A0A0",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  gregorianHint: {
+    color: "#808080",
+    fontSize: 11,
+    fontWeight: "400",
   },
   specialBadgeContainer: {
     flexDirection: "row",
@@ -61,17 +101,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
-    shadowColor: "#d4af37",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.5,
-    shadowRadius: 3,
-    elevation: 2,
-    maxWidth: "100%",
+    alignSelf: "flex-start",
+    marginTop: 2,
   },
   specialBadgeText: {
     color: "#fff",
     fontSize: 10,
-    fontWeight: "800",
+    fontWeight: "bold",
+    marginLeft: 4,
     textTransform: "uppercase",
   },
 });

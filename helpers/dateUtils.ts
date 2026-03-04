@@ -1,4 +1,5 @@
 import { toHijri } from "hijri-converter";
+import { hijriStringToGregorianDate } from "./hijriUtils";
 
 // CSV ve Veritabanındaki 'code' sütunuyla BİREBİR aynı olmalı
 export const PERIOD_CODES = {
@@ -34,68 +35,66 @@ export const HIJRI_MONTHS = [
 ];
 
 /**
- * Bir tarihin üzerindeki tüm etiketleri (Tags) hesaplar.
- * Örn: 25.01.2026 -> ['DAILY', 'WEEKLY_MON_THU', 'SPECIAL_BERAT']
+ * Bir Hicri tarihin üzerindeki tüm etiketleri (Tags) hesaplar.
+ * @param hijriDateStr "1446-08-22" formatında Hicri tarih
+ * @returns Tags array ve hijri bilgileri
  */
-export const getDateAttributes = (dateInput: Date | string) => {
-  const date = new Date(dateInput);
-  // Her gün DAILY grubundadır (Namaz vb. için)
+export const getDateAttributes = (hijriDateStr: string) => {
+  // Hicri tarihi parse et
+  const [hy, hm, hd] = hijriDateStr.split("-").map(Number);
+
+  // Her gün DAILY grubundadır
   const tags: string[] = [PERIOD_CODES.DAILY];
 
-  // 1. HAFTALIK KONTROLLER (Miladi)
-  const dayOfWeek = date.getDay(); // 0:Pazar ... 5:Cuma
+  // 1. HAFTALIK KONTROLLER (Miladi gün bazlı - Cuma namazı için)
+  // Hicri → Miladi çevir
+  const gregorianDate = hijriStringToGregorianDate(hijriDateStr);
+  const dayOfWeek = gregorianDate.getDay(); // 0:Pazar ... 5:Cuma
+
   if (dayOfWeek === 5) tags.push(PERIOD_CODES.WEEKLY_FRI);
-  if (dayOfWeek === 1 || dayOfWeek === 4)
-    tags.push(PERIOD_CODES.WEEKLY_MON_THU);
+  if (dayOfWeek === 1 || dayOfWeek === 4) tags.push(PERIOD_CODES.WEEKLY_MON_THU);
 
-  // 2. HİCRİ HESAPLAMA
-  const hijri = toHijri(
-    date.getFullYear(),
-    date.getMonth() + 1,
-    date.getDate(),
-  );
-
-  // --- ÖZEL GÜN KONTROLLERİ ---
+  // 2. HİCRİ ÖZEL GÜN KONTROLLERİ
 
   // Ramazan Ayı
-  if (hijri.hm === 9) {
+  if (hm === 9) {
     tags.push(PERIOD_CODES.YEARLY_RAMADAN);
-    if (hijri.hd === 27) tags.push(PERIOD_CODES.SPECIAL_QADR);
+    if (hd === 27) tags.push(PERIOD_CODES.SPECIAL_QADR);
   }
 
   // Kandiller
-  if (hijri.hm === 7 && hijri.hd === 27) tags.push(PERIOD_CODES.SPECIAL_MIRAC);
-  if (hijri.hm === 8 && hijri.hd === 15) tags.push(PERIOD_CODES.SPECIAL_BERAT);
-  if (hijri.hm === 3 && hijri.hd === 12) tags.push(PERIOD_CODES.SPECIAL_MEVLID);
+  if (hm === 7 && hd === 27) tags.push(PERIOD_CODES.SPECIAL_MIRAC);
+  if (hm === 8 && hd === 15) tags.push(PERIOD_CODES.SPECIAL_BERAT);
+  if (hm === 3 && hd === 12) tags.push(PERIOD_CODES.SPECIAL_MEVLID);
 
   // Arefe (Kurban Arefesi - Zilhicce 9)
-  if (hijri.hm === 12 && hijri.hd === 9) tags.push(PERIOD_CODES.SPECIAL_AREFE);
+  if (hm === 12 && hd === 9) tags.push(PERIOD_CODES.SPECIAL_AREFE);
 
   // Bayramlar
-  if (hijri.hm === 10 && hijri.hd <= 3) tags.push(PERIOD_CODES.EID_RAMADAN);
-  if (hijri.hm === 12 && hijri.hd >= 10 && hijri.hd <= 13)
-    tags.push(PERIOD_CODES.EID_ADHA);
+  if (hm === 10 && hd <= 3) tags.push(PERIOD_CODES.EID_RAMADAN);
+  if (hm === 12 && hd >= 10 && hd <= 13) tags.push(PERIOD_CODES.EID_ADHA);
 
   // Mevsimsel
-  if ([7, 8, 9].includes(hijri.hm)) tags.push(PERIOD_CODES.SEASON_THREE_MONTHS);
-  if (hijri.hm === 12 && hijri.hd <= 10)
-    tags.push(PERIOD_CODES.SEASON_ZULHIJJAH_10);
-  if (hijri.hm === 1 && hijri.hd === 10) tags.push(PERIOD_CODES.SPECIAL_ASHURA);
+  if ([7, 8, 9].includes(hm)) tags.push(PERIOD_CODES.SEASON_THREE_MONTHS);
+  if (hm === 12 && hd <= 10) tags.push(PERIOD_CODES.SEASON_ZULHIJJAH_10);
+  if (hm === 1 && hd === 10) tags.push(PERIOD_CODES.SPECIAL_ASHURA);
 
   return {
-    date,
-    hijri,
+    hijriDate: hijriDateStr,
+    hijri: { year: hy, month: hm, day: hd },
+    gregorianDate,
     tags,
   };
 };
 
 /**
- * Kritik Fonksiyon: Verilen tarih, bu amel kodu için geçerli mi?
- * Örn: Bugün 'Salı' ise ve kod 'WEEKLY_MON_THU' ise FALSE döner.
+ * Kritik Fonksiyon: Verilen Hicri tarih, bu amel kodu için geçerli mi?
+ * @param hijriDateStr "1446-08-22"
+ * @param periodCode "WEEKLY_FRI", "YEARLY_RAMADAN" vb.
  */
-export const isValidForPeriod = (date: Date, periodCode: string) => {
+export const isValidForPeriod = (hijriDateStr: string, periodCode: string) => {
   if (!periodCode || periodCode === PERIOD_CODES.DAILY) return true;
 
-  const { tags } = getDateAttributes(date);
+  const { tags } = getDateAttributes(hijriDateStr);
   return tags.includes(periodCode);
 };

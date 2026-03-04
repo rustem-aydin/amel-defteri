@@ -36,7 +36,7 @@ export const deeds = sqliteTable(
     startRef: text("start_ref"),
     endRef: text("end_ref"),
     timeMask: text("time_mask"),
-    intentionPoints: integer("intention_points").default(0),
+    // intentionPoints kaldırıldı
     deedPoints: integer("deed_points").default(0),
 
     createdAt: text("created_at")
@@ -91,18 +91,23 @@ export const userDeeds = sqliteTable(
     deedId: integer("deed_id")
       .notNull()
       .references(() => deeds.id),
-    addedAt: text("added_at").notNull(), // Listeye eklenme tarihi
-    removedAt: text("removed_at"), // Listeden çıkma tarihi
+
+    // 🌙 Hicri tarihler (Listeye eklenme/çıkma)
+    addedAtHijri: text("added_at_hijri").notNull(), // "1446-08-22"
+    removedAtHijri: text("removed_at_hijri"), // "1446-09-15" veya null
+
+    // 📅 Miladi tarihler (Yedek)
+    addedAtGregorian: text("added_at_gregorian").notNull(), // "2025-02-15"
+    removedAtGregorian: text("removed_at_gregorian"), // "2025-03-16" veya null
+
     level: integer("level").default(1),
     lastMilestone: integer("last_milestone").default(0),
-
     targetCount: integer("target_count").default(1),
   },
   (t) => ({
     idxDeedId: uniqueIndex("idx_user_deeds_unique_deed_id").on(t.deedId),
-
-    idxAddedAt: index("idx_user_deeds_added_at").on(t.addedAt),
-    idxRemovedAt: index("idx_user_deeds_removed_at").on(t.removedAt),
+    idxAddedAtHijri: index("idx_user_deeds_added_at_hijri").on(t.addedAtHijri),
+    idxRemovedAtHijri: index("idx_user_deeds_removed_at_hijri").on(t.removedAtHijri),
   }),
 );
 
@@ -111,14 +116,23 @@ export const dailyLogs = sqliteTable(
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     deedId: integer("deed_id").references(() => deeds.id),
-    date: text("date"), // YYYY-MM-DD formatında tutuyoruz
-    isIntended: integer("is_intended").default(0),
+
+    // 🌙 HİCRİ TARİH (Ana kullanım)
+    dateHijri: text("date_hijri").notNull(), // "1446-08-22" formatında
+
+    // 📅 MİLADİ TARİH (Yedek - sorun olursa kullanılır)
+    dateGregorian: text("date_gregorian").notNull(), // "2025-02-15" formatında
+
+    // isIntended kaldırıldı
     isCompleted: integer("is_completed").default(0),
     earnedPoints: integer("earned_points").default(0),
   },
   (t) => ({
-    idxDeedDate: uniqueIndex("idx_daily_logs_deed_date").on(t.deedId, t.date),
+    // Ana index: Hicri tarih
+    idxDeedDateHijri: uniqueIndex("idx_daily_logs_deed_date_hijri").on(t.deedId, t.dateHijri),
+    idxDateHijri: index("idx_daily_logs_date_hijri").on(t.dateHijri),
 
-    idxDate: index("idx_daily_logs_date").on(t.date),
+    // Yedek index: Miladi tarih (grafik sorguları için)
+    idxDateGregorian: index("idx_daily_logs_date_gregorian").on(t.dateGregorian),
   }),
 );

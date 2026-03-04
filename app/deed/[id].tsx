@@ -5,18 +5,37 @@ import DeedStatusCards from "@/components/layout/modals/deed-details/components/
 import { ParallaxScrollView } from "@/components/ui/parallax-scrollview";
 import { Text } from "@/components/ui/text";
 import { View } from "@/components/ui/view";
-import { useDeed } from "@/db/hooks/useAllQueries";
+import { useDailyPlan, useDeed } from "@/db/hooks/useAllQueries";
+import { getCurrentHijriDate } from "@/helpers/hijriUtils";
+import { useAppStore } from "@/store/useAppStore";
 import { useLocalSearchParams } from "expo-router";
+import { useMemo } from "react";
 
 export default function DeedDetailScreen() {
   const { id } = useLocalSearchParams();
   const deedId = id ? Number(id) : 0;
   const { data } = useDeed(deedId);
+
+  // 🌙 Global Hicri Tarih State'i
+  const selectedHijriDate = useAppStore((s) => s.selectedHijriDate);
+  // Seçili tarih yoksa bugünü baz al
+  const displayDate = selectedHijriDate || getCurrentHijriDate();
+
+  // 📅 Seçili günün planını çek (Performanslı, cached)
+  const { data: dailyData = [] } = useDailyPlan(displayDate);
+
+  // Bu amelin o günkü durumunu bul
+  const dayDeed = useMemo(
+    () => dailyData.find((d) => d.deedId === deedId),
+    [dailyData, deedId],
+  );
+
   if (!data) return null;
-  console.log(JSON.stringify(data, null, 2));
+
   return (
     <ParallaxScrollView
       headerHeight={260}
+      showBackButton
       headerImage={
         <DeedDetailsHeader
           categoryName={String(data?.categoryName)}
@@ -29,6 +48,8 @@ export default function DeedDetailScreen() {
       }
     >
       <View style={{ gap: 16 }}>
+        {/* Üst Bilgi ve Aksiyon Butonu */}
+
         <View>
           <Text variant="title">Fazileti</Text>
           <Text>{data?.virtueText}</Text>
@@ -56,7 +77,6 @@ export default function DeedDetailScreen() {
               id={deedId}
               level={data?.level}
               deedPoints={data?.deedPoints}
-              intentionPoints={data?.intentionPoints}
             />
             <DeedActivityHeatmap id={deedId} />
           </View>

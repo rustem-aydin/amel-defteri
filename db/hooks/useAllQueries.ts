@@ -24,6 +24,8 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { addHijriDays } from "@/helpers/hijriUtils";
+import { getDateAttributes } from "@/helpers/dateUtils";
 
 export const useDeeds = (filters: any) => {
   const version = useSyncStore((s) => s.version);
@@ -90,80 +92,66 @@ export const useDeedResources = (deedId: number) => {
 };
 
 // ==========================================
-// 2. KULLANICI & TAKVİM HOOKLARI (OPTIMIZED)
+// 2. KULLANICI & TAKVİM HOOKLARI (HİCRİ SYSTEM)
 // ==========================================
 
-// Yardımcı Fonksiyon: Gün Ekle/Çıkar
-const addDays = (dateStr: string, days: number): string => {
-  const date = new Date(dateStr);
-  date.setDate(date.getDate() + days);
-  return date.toISOString().split("T")[0];
-};
-
-// JS tarafında filtreleme (Haftanın günlerine göre)
-const filterDeedsByPeriod = (userDeeds: any[], dateStr: string) => {
-  const dateObj = new Date(dateStr);
-  const dayOfWeek = dateObj.getDay(); // 0: Pazar, 1: Pzt...
-
-  return userDeeds.filter((item) => {
-    const code = item.periodCode;
-    switch (code) {
-      case "DAILY":
-        return true;
-      case "WEEKLY_FRI":
-        return dayOfWeek === 5;
-      case "WEEKLY_MON_THU":
-        return dayOfWeek === 1 || dayOfWeek === 4;
-      default:
-        return true;
-    }
-  });
-};
-
 /**
- * 🔥 OPTİMİZE EDİLMİŞ GÜNLÜK PLAN
+ * 🔥 OPTİMİZE EDİLMİŞ GÜNLÜK PLAN (HİCRİ)
  * Tek bir SQL sorgusu ile her şeyi getirir.
+ * Artık filtreleme SQL tarafında yapılıyor (getDateAttributes ile)
  */
-export const useDailyPlan = (date: string) => {
+export const useDailyPlan = (hijriDate: string) => {
   return useQuery({
-    queryKey: ["daily-plan", date],
+    queryKey: ["daily-plan", hijriDate],
     queryFn: async () => {
-      const data = await getUserDeeds(date);
-      // Log verileri zaten data'nın içinde (isCompleted, logId vs.)
-      return filterDeedsByPeriod(data, date);
+      console.log(`🔍 [QUERY START] Günlük Plan Çekiliyor: '${hijriDate}'`);
+      const data = await getUserDeeds(hijriDate);
+      console.log(`📊 [QUERY RESULT] '${hijriDate}' için ${data.length} kayıt bulundu.`);
+
+      // İlk kaydın durumunu logla (Örneklem)
+      if (data.length > 0) {
+         const doneCount = data.filter(d => d.isCompleted).length;
+         console.log(`✅ Tamamlanan Amel Sayısı: ${doneCount}`);
+         // Debug için ilk tamamlanan kaydı göster
+         const firstDone = data.find(d => d.isCompleted);
+         if (firstDone) {
+            console.log(`Example Done Deed: ID=${firstDone.deedId}, isCompleted=${firstDone.isCompleted}, LogID=${firstDone.logId}`);
+         }
+      }
+      return data;
     },
-    staleTime: 1000 * 60 * 2, // 2 dk cache (DB'yi rahatlatır)
+    staleTime: 0, // Debug için cache kapalı
   });
 };
 
 /**
- * 🚀 SİHİRLİ PRELOADER
+ * 🚀 SİHİRLİ PRELOADER (HİCRİ)
  * Bunu ana sayfana ekle. Dünü ve Yarını arka planda yükler.
  */
-export const useCalendarPreload = (currentDate: string) => {
+export const useCalendarPreload = (currentHijriDate: string) => {
   const queryClient = useQueryClient();
 
   useEffect(() => {
     const datesToPreload = [
-      addDays(currentDate, 1), // Yarın
-      addDays(currentDate, -1), // Dün
+      addHijriDays(currentHijriDate, 1), // Yarın
+      addHijriDays(currentHijriDate, -1), // Dün
     ];
 
-    datesToPreload.forEach((date) => {
+    datesToPreload.forEach((hijriDate) => {
       // Eğer cache'de yoksa yükle
-      const state = queryClient.getQueryState(["daily-plan", date]);
+      const state = queryClient.getQueryState(["daily-plan", hijriDate]);
       if (!state?.data) {
         queryClient.prefetchQuery({
-          queryKey: ["daily-plan", date],
+          queryKey: ["daily-plan", hijriDate],
           queryFn: async () => {
-            const data = await getUserDeeds(date);
-            return filterDeedsByPeriod(data, date);
+            const data = await getUserDeeds(hijriDate);
+            return data;
           },
           staleTime: 1000 * 60 * 5,
         });
       }
     });
-  }, [currentDate, queryClient]);
+  }, [currentHijriDate, queryClient]);
 };
 
 // ==========================================

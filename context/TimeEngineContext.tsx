@@ -1,18 +1,27 @@
-import { TimeRefs, useTimeEngine } from "@/hooks/useTimeEngine";
+import { IslamicTimeState, useTimeEngine } from "@/hooks/useTimeEngine";
 import { useLocationStore } from "@/store/useLocationStore";
-import React, { createContext, ReactNode, useContext } from "react";
+import { useAppStore } from "@/store/useAppStore";
+import React, { createContext, ReactNode, useContext, useEffect } from "react";
 
 // Context oluşturuluyor
-const TimeEngineContext = createContext<TimeRefs | null>(null);
+const TimeEngineContext = createContext<IslamicTimeState | null>(null);
 
 // Provider Bileşeni
 export const TimeEngineProvider = ({ children }: { children: ReactNode }) => {
   const coords = useLocationStore((state) => state.coords);
 
-  const references = useTimeEngine(coords);
+  const engine = useTimeEngine(coords);
+
+  // 🌙 Akşam namazından sonra effectiveHijriToday'i güncelle
+  const setEffectiveHijriToday = useAppStore((s) => s.setEffectiveHijriToday);
+  useEffect(() => {
+    if (engine?.effectiveDateHijri) {
+      setEffectiveHijriToday(engine.effectiveDateHijri);
+    }
+  }, [engine?.effectiveDateHijri, setEffectiveHijriToday]);
 
   return (
-    <TimeEngineContext.Provider value={references}>
+    <TimeEngineContext.Provider value={engine}>
       {children}
     </TimeEngineContext.Provider>
   );

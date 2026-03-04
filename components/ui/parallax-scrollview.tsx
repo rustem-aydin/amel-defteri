@@ -1,7 +1,11 @@
 import { View } from "@/components/ui/view";
 import { useBottomTabOverflow } from "@/hooks/useBottomTabOverflow";
 import { useColor } from "@/theme/useColor";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import type { PropsWithChildren, ReactElement } from "react";
+import { Pressable } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   interpolate,
   useAnimatedRef,
@@ -12,13 +16,17 @@ import Animated, {
 type Props = PropsWithChildren<{
   headerHeight?: number;
   headerImage: ReactElement;
+  showBackButton?: boolean;
 }>;
 
 export function ParallaxScrollView({
   children,
   headerHeight = 250,
   headerImage,
+  showBackButton,
 }: Props) {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const backgroundColor = useColor("background");
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
   const scrollOffset = useScrollViewOffset(scrollRef);
@@ -67,6 +75,25 @@ export function ParallaxScrollView({
           ]}
         >
           {headerImage}
+          {showBackButton && (
+            <Pressable
+              onPress={() => router.back()}
+              style={{
+                position: "absolute",
+                top: insets.top + 8,
+                left: 16,
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: "rgba(0,0,0,0.4)",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 10,
+              }}
+            >
+              <Ionicons name="chevron-back" size={22} color="white" />
+            </Pressable>
+          )}
         </Animated.View>
         <View
           style={{

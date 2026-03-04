@@ -1,40 +1,46 @@
-// screens/LibraryScreen.tsx
-import { format, subMonths } from "date-fns";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 
 import { AreaChartInteractive } from "@/components/layout/modals/stats/StatisticCard";
 import { Badge } from "@/components/ui/badge";
-import { DatePicker, DateRange } from "@/components/ui/date-picker";
+import {
+  HijriRangePicker,
+  HijriRange,
+} from "@/components/ui/hijri-range-picker";
 import { ParallaxScrollView } from "@/components/ui/parallax-scrollview";
 import { Text } from "@/components/ui/text";
 import { View } from "@/components/ui/view";
 import { useLibraryDashboard } from "@/db/hooks/useAllQueries";
+import {
+  getCurrentHijriDate,
+  parseHijriDate,
+  getHijriMonthLength,
+} from "@/helpers/hijriUtils";
+
+const pad = (n: number) => String(n).padStart(2, "0");
 
 export default function LibraryScreen() {
-  // 1. Varsayılan son 6 ayı ayarla (DateRange tipine uygun şekilde)
-  const [selectedRange, setSelectedRange] = useState<DateRange | undefined>(
-    () => ({
-      startDate: subMonths(new Date(), 6),
-      endDate: new Date(),
-    }),
+  // 1. Varsayılan: Mevcut Hicri yılın başından bugüne
+  const [selectedRange, setSelectedRange] = useState<HijriRange>(() => {
+    const today = getCurrentHijriDate();
+    const { year } = parseHijriDate(today);
+    return {
+      startHijri: `${year}-01-01`,
+      endHijri: today,
+    };
+  });
+
+  // 2. Tek Sorgu: Dashboard verisini Hicri tarihlerle çek
+  const { data, isLoading } = useLibraryDashboard(
+    selectedRange.startHijri,
+    selectedRange.endHijri,
   );
-
-  // 2. Tarihleri string formatına çevir
-  const startDateStr = selectedRange?.startDate
-    ? format(selectedRange.startDate, "yyyy-MM-dd")
-    : "";
-  const endDateStr = selectedRange?.endDate
-    ? format(selectedRange.endDate, "yyyy-MM-dd")
-    : "";
-
-  // 3. Tek Sorgu: Dashboard verisini çek
-  const { data, isLoading } = useLibraryDashboard(startDateStr, endDateStr);
 
   return (
     <ParallaxScrollView
       headerHeight={240}
+      showBackButton
       headerImage={
         <View style={{ position: "relative", width: "100%", height: "100%" }}>
           <Image
@@ -64,9 +70,8 @@ export default function LibraryScreen() {
       }
     >
       <View style={{ gap: 24 }}>
-        {/* Tarih Seçimi */}
-        <DatePicker
-          mode="range"
+        {/* Hicri Tarih Seçimi */}
+        <HijriRangePicker
           label="Zaman Aralığı"
           value={selectedRange}
           onChange={setSelectedRange}

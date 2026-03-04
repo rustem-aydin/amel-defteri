@@ -5,112 +5,87 @@ import { useColors } from "@/theme/useColors";
 import { FlashList } from "@shopify/flash-list";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  addHijriDays,
+  compareHijriDates,
+  parseHijriDate,
+} from "@/helpers/hijriUtils";
+import { useTimeReferences } from "@/context/TimeEngineContext";
 
-// Türkçe Gün İsimleri
-const TR_DAYS = ["Paz", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt"];
 const FUTURE_DAYS = 30;
-
-// YARDIMCI: YYYY-MM-DD -> Date
-const parseDate = (str: string) => {
-  const [y, m, d] = str.split("-").map(Number);
-  return new Date(y, m - 1, d);
-};
-
-// YARDIMCI: Date -> YYYY-MM-DD
-const formatDate = (date: Date) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-};
+const DEFAULT_PAST_DAYS = 3;
 
 export const HorizontalCalendar = () => {
-  const { selectedDate, setSelectedDate } = useAppStore();
+  const { selectedHijriDate, setSelectedHijriDate } = useAppStore();
+  const engine = useTimeReferences();
   const { isDark } = useModeToggle();
   const { background, active, text, textMuted, border } = useColors();
+  const { data: earliestDate } = useEarliestActivityDate();
 
-  // FIX: Type hatasını önlemek için 'any' kullanıyoruz
   const listRef = useRef<any>(null);
-
-  // İlk yükleme kontrolü (Animasyon yönetimi için)
   const [hasScrolled, setHasScrolled] = useState(false);
 
-  // Veritabanından en eski tarihi çek
-  const { data: earliestDateStr, isLoading } = useEarliestActivityDate();
+  // Use engine.effectiveDateHijri if available (this correctly handles post-maghrib logic)
+  const effectiveHijriToday = engine?.effectiveDateHijri || useAppStore.getState().effectiveHijriToday;
 
-  const { dates, todayStr } = useMemo(() => {
-    const today = new Date();
+  const { dates, todayHijri } = useMemo(() => {
+    const today = effectiveHijriToday;
 
-    today.setHours(0, 0, 0, 0);
-    const tStr = formatDate(today);
+    // 1. Başlangıç Tarihi: En eski aktivite tarihi veya bugünden 3 gün gerisi
+    const fallbackStart = addHijriDays(today, -DEFAULT_PAST_DAYS);
+    let startHijri = fallbackStart;
 
-    // 1. Başlangıç Tarihi
-    let startDate = new Date(today);
-    if (earliestDateStr) {
-      startDate = parseDate(earliestDateStr);
-    } else {
-      startDate.setDate(today.getDate() - 6);
-    }
-    startDate.setHours(0, 0, 0, 0);
-
-    if (startDate > today) {
-      startDate = new Date(today);
-      startDate.setDate(today.getDate() - 6);
+    if (earliestDate && compareHijriDates(earliestDate, fallbackStart) < 0) {
+      startHijri = earliestDate;
     }
 
-    const endDate = new Date(today);
-    endDate.setDate(today.getDate() + FUTURE_DAYS);
+    // 2. Bitiş Tarihi: 30 gün ilerisi
+    const endHijri = addHijriDays(today, FUTURE_DAYS);
 
+    // 3. Tüm Hicri günleri oluştur
     const list: string[] = [];
-    const current = new Date(startDate);
+    let current = startHijri;
 
-    while (current <= endDate) {
-      list.push(formatDate(current));
-      current.setDate(current.getDate() + 1);
+    while (compareHijriDates(current, endHijri) <= 0) {
+      list.push(current);
+      current = addHijriDays(current, 1);
     }
 
-    return { dates: list, todayStr: tStr };
-  }, [earliestDateStr]);
+    return { dates: list, todayHijri: today };
+  }, [earliestDate, effectiveHijriToday]);
 
-  // --- SCROLL KONUMLANMA MANTIĞI (DÜZELTİLDİ) ---
+  // --- SCROLL KONUMLANMA ---
   useEffect(() => {
-    // Liste boşsa veya ref hazır değilse işlem yapma
     if (dates.length === 0 || !listRef.current) return;
 
-    let targetIndex = dates.indexOf(selectedDate);
+    let targetIndex = dates.indexOf(selectedHijriDate);
 
-    // Eğer seçili tarih listede yoksa bugüne git
+    // Seçili tarih yoksa bugüne git
     if (targetIndex === -1) {
-      targetIndex = dates.indexOf(todayStr);
+      targetIndex = dates.indexOf(todayHijri);
     }
-    // O da yoksa listenin sonuna git
     if (targetIndex === -1) {
       targetIndex = dates.length - 1;
     }
 
     if (targetIndex !== -1) {
-      // hasScrolled FALSE ise (ilk açılış) -> animated: false
-      // hasScrolled TRUE ise (sonraki tıklamalar) -> animated: true
       listRef.current.scrollToIndex({
         index: targetIndex,
         animated: hasScrolled,
-        viewPosition: 0.5, // Öğeyi ortala
+        viewPosition: 0.5,
       });
 
-      // İlk kaydırmadan sonra durumu güncelle
       if (!hasScrolled) {
         setHasScrolled(true);
       }
     }
-  }, [dates, selectedDate, hasScrolled, todayStr]);
+  }, [dates, selectedHijriDate, hasScrolled, todayHijri]);
 
   const renderItem = ({ item }: { item: string }) => {
-    const dateObj = parseDate(item);
-    const dayName = TR_DAYS[dateObj.getDay()];
-    const dayNum = dateObj.getDate();
+    const { day, monthName } = parseHijriDate(item);
 
-    const isSelected = item === selectedDate;
-    const isToday = item === todayStr;
+    const isSelected = item === selectedHijriDate;
+    const isToday = item === todayHijri;
 
     let bg = "transparent";
     let brd = border;
@@ -133,7 +108,7 @@ export const HorizontalCalendar = () => {
 
     return (
       <TouchableOpacity
-        onPress={() => setSelectedDate(item)}
+        onPress={() => setSelectedHijriDate(item)}
         activeOpacity={0.7}
         style={[
           styles.item,
@@ -144,13 +119,15 @@ export const HorizontalCalendar = () => {
           },
         ]}
       >
-        <Text style={[styles.dayName, { color: txtName }]}>{dayName}</Text>
-        <Text style={[styles.dayNum, { color: txtNum }]}>{dayNum}</Text>
+        <Text style={[styles.dayName, { color: txtName }]}>
+          {monthName.slice(0, 3)}
+        </Text>
+        <Text style={[styles.dayNum, { color: txtNum }]}>{day}</Text>
       </TouchableOpacity>
     );
   };
 
-  if (isLoading && dates.length === 0) {
+  if (dates.length === 0) {
     return (
       <View
         style={[
@@ -171,6 +148,7 @@ export const HorizontalCalendar = () => {
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        estimatedItemSize={60}
       />
     </View>
   );

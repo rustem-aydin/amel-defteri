@@ -10,19 +10,50 @@ interface DeedBadgeProps {
   points: number;
   level: number;
   color: string;
+  isDone: boolean;
+  isFutureDate?: boolean;
 }
 
 export const DeedBadge = React.memo(
-  ({ viewMode, points, level, color }: DeedBadgeProps) => {
+  ({
+    viewMode,
+    points,
+    level,
+    color,
+    isDone,
+    isFutureDate,
+  }: DeedBadgeProps) => {
+    // Gelecek tarihse badge gösterme (boş alan kalsın diye View dönebiliriz)
+    if (isFutureDate) {
+      // Pasif yeşil renkle saat ikonu
+      const futureColor = withOpacity(color, 0.3);
+      const futureBg = withOpacity(color, 0.05);
+
+      return (
+        <View
+          style={[
+            styles.levelBadge,
+            { borderColor: futureColor, backgroundColor: futureBg },
+          ]}
+        >
+          <Ionicons name="time-outline" size={26} color={futureColor} />
+        </View>
+      );
+    }
+
+    // Tamamlandıysa canlı renk, değilse sönük (pasif) renk
+    const activeOpacity = isDone ? 1 : 0.3;
+    const bgOpacity = isDone ? 0.15 : 0.05;
+
     const badgeStyle = [
       styles.levelBadge,
       {
-        borderColor: withOpacity(color, 0.4),
-        backgroundColor: withOpacity(color, 0.1),
+        borderColor: withOpacity(color, activeOpacity),
+        backgroundColor: withOpacity(color, bgOpacity),
       },
     ];
 
-    const contentColor = withOpacity(color, 0.4);
+    const contentColor = withOpacity(color, isDone ? 1 : 0.5);
 
     if (viewMode === "time") {
       return (

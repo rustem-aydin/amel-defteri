@@ -4,199 +4,242 @@ import {
   PrayerTimes,
   SunnahTimes,
 } from "adhan";
-import { useMemo } from "react";
-import tzLookup from "tz-lookup";
+import { addDays, isAfter } from "date-fns";
+import { useEffect, useMemo, useState } from "react";
+import { addHijriDays, gregorianToHijriString } from "@/helpers/hijriUtils";
 
 // --- TİPLER ---
+export type PrayerRefKeys =
+  | "FAJR"
+  | "SUNRISE"
+  | "DHUHR"
+  | "ASR"
+  | "MAGHRIB"
+  | "ISHA"
+  | "MIDNIGHT"
+  | "LAST_THIRD"
+  | "ISHRAK"
+  | "ISTIVA"
+  | "ISFIRAR";
 
-export type TimeRefs = {
-  FAJR: Date;
-  SUNRISE: Date;
-  DHUHR: Date;
-  ASR: Date;
-  MAGHRIB: Date;
-  ISHA: Date;
-  ISHRAK: Date;
-  ISTIVA: Date;
-  ISFIRAR: Date;
-  MIDNIGHT: Date;
-  LAST_THIRD: Date;
-  offset: number;
+export type TimeRefs = Record<PrayerRefKeys, Date>;
+
+export type IslamicTimeState = {
+  now: Date;
+
+  // Miladi Tarihler (Prayer times için)
+  actualDate: Date;
+  effectiveDate: Date;
+
+  // 🌙 Hicri Tarihler (UI ve DB için)
+  actualDateHijri: string; // "1446-08-14"
+  effectiveDateHijri: string; // Akşam sonrası "1446-08-15"
+
+  isPostMaghrib: boolean;
+  refs: TimeRefs;
+  nextDayFajr: Date;
 };
 
 export type AmelStatusResult = {
-  status:
-    | "loading"
-    | "all_day"
-    | "not_started"
-    | "active"
-    | "expired"
-    | "error";
+  status: "active" | "future" | "expired" | "loading" | "error";
   text: string;
-  message: string;
   color: string;
+  percent: number;
 };
 
-const toTimeZone = (date: Date, timeZone: string) => {
-  try {
-    const options: Intl.DateTimeFormatOptions = {
-      timeZone,
-      year: "numeric",
-      month: "numeric",
-      day: "numeric",
-      hour: "numeric",
-      minute: "numeric",
-      second: "numeric",
-      hour12: false,
-    };
+// --- YARDIMCI FONKSİYONLAR ---
+const calculateRefData = (
+  date: Date,
+  coords: Coordinates,
+): { times: PrayerTimes; sunnah: SunnahTimes } => {
+  const params = CalculationMethod.Turkey();
+  const times = new PrayerTimes(coords, date, params);
+  const sunnah = new SunnahTimes(times);
+  return { times, sunnah };
+};
 
-    const formatter = new Intl.DateTimeFormat("en-US", options);
-    const parts = formatter.formatToParts(date);
-    const getPart = (type: string) => {
-      const part = parts.find((p) => p.type === type);
-      return part ? parseInt(part.value, 10) : 0;
-    };
+const formatDuration = (ms: number) => {
+  if (ms < 0) return "0 dk";
+  const minutes = Math.floor(ms / 60000);
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours > 0) return `${hours} sa ${mins} dk`;
+  return `${mins} dk`;
+};
 
-    const shiftedTime = Date.UTC(
-      getPart("year"),
-      getPart("month") - 1,
-      getPart("day"),
-      getPart("hour"),
-      getPart("minute"),
-      getPart("second"),
+// --- ANA HOOK ---
+export const useTimeEngine = (
+  coords: { latitude: number; longitude: number } | null,
+): IslamicTimeState | null => {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000 * 60);
+    return () => clearInterval(timer);
+  }, []);
+
+  return useMemo(() => {
+    if (!coords) return null;
+
+    const coordinates = new Coordinates(coords.latitude, coords.longitude);
+    const { times: todayTimes, sunnah: todaySunnah } = calculateRefData(
+      now,
+      coordinates,
     );
-    return new Date(shiftedTime);
-  } catch (error) {
-    return date;
-  }
-};
 
-const formatMs = (ms: number) => {
-  if (ms < 0) ms = 0;
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-};
+    const isPostMaghrib = isAfter(now, todayTimes.maghrib);
+    const effectiveDate = isPostMaghrib ? addDays(now, 1) : now;
 
-// --- HOOK ---
-export const useTimeEngine = (coords: Coordinates | null | undefined) => {
-  const references = useMemo(() => {
-    if (!coords || !coords.latitude || !coords.longitude) return null;
+    // 🌙 Hicri Tarihler
+    const actualDateHijri = gregorianToHijriString(now);
+    const effectiveDateHijri = isPostMaghrib
+      ? addHijriDays(actualDateHijri, 1)
+      : actualDateHijri;
 
-    const coord = new Coordinates(coords.latitude, coords.longitude);
-    const date = new Date();
-    const params = CalculationMethod.Turkey();
+    let refs: TimeRefs;
+    let nextDayFajr: Date;
 
-    let timeZone;
-    try {
-      timeZone = tzLookup(coords.latitude, coords.longitude);
-    } catch (e) {
-      timeZone = "Europe/Istanbul";
+    if (!isPostMaghrib) {
+      // GÜNDÜZ MODU
+      const tomorrowTimes = calculateRefData(
+        addDays(now, 1),
+        coordinates,
+      ).times;
+
+      refs = {
+        FAJR: todayTimes.fajr,
+        SUNRISE: todayTimes.sunrise,
+        DHUHR: todayTimes.dhuhr,
+        ASR: todayTimes.asr,
+        MAGHRIB: todayTimes.maghrib,
+        ISHA: todayTimes.isha,
+        MIDNIGHT: todaySunnah.middleOfTheNight,
+        LAST_THIRD: todaySunnah.lastThirdOfTheNight,
+        ISHRAK: new Date(todayTimes.sunrise.getTime() + 45 * 60000),
+        ISTIVA: new Date(todayTimes.dhuhr.getTime() - 45 * 60000),
+        ISFIRAR: new Date(todayTimes.maghrib.getTime() - 45 * 60000),
+      };
+      nextDayFajr = tomorrowTimes.fajr;
+    } else {
+      // GECE MODU (Hybrid)
+      const tomorrowData = calculateRefData(addDays(now, 1), coordinates);
+      const tomorrowTimes = tomorrowData.times;
+
+      refs = {
+        MAGHRIB: todayTimes.maghrib, // Bugünden
+        ISHA: todayTimes.isha, // Bugünden
+        MIDNIGHT: todaySunnah.middleOfTheNight, // Bugünden
+        LAST_THIRD: todaySunnah.lastThirdOfTheNight, // Bugünden
+        FAJR: tomorrowTimes.fajr, // Yarından
+        SUNRISE: tomorrowTimes.sunrise,
+        DHUHR: tomorrowTimes.dhuhr,
+        ASR: tomorrowTimes.asr,
+        ISHRAK: new Date(tomorrowTimes.sunrise.getTime() + 45 * 60000),
+        ISTIVA: new Date(tomorrowTimes.dhuhr.getTime() - 45 * 60000),
+        ISFIRAR: new Date(todayTimes.maghrib.getTime() - 45 * 60000),
+      };
+
+      const dayAfterData = calculateRefData(addDays(now, 2), coordinates);
+      nextDayFajr = dayAfterData.times.fajr;
     }
 
-    const p = new PrayerTimes(coord, date, params);
-    const s = new SunnahTimes(p);
-
-    const nowSystem = new Date();
-    const nowShifted = toTimeZone(nowSystem, timeZone);
-    const offset = nowShifted.getTime() - nowSystem.getTime();
-
     return {
-      FAJR: toTimeZone(p.fajr, timeZone),
-      SUNRISE: toTimeZone(p.sunrise, timeZone),
-      DHUHR: toTimeZone(p.dhuhr, timeZone),
-      ASR: toTimeZone(p.asr, timeZone),
-      MAGHRIB: toTimeZone(p.maghrib, timeZone),
-      ISHA: toTimeZone(p.isha, timeZone),
-      ISHRAK: toTimeZone(
-        new Date(p.sunrise.getTime() + 45 * 60 * 1000),
-        timeZone,
-      ),
-      ISTIVA: toTimeZone(
-        new Date(p.dhuhr.getTime() - 45 * 60 * 1000),
-        timeZone,
-      ),
-      ISFIRAR: toTimeZone(
-        new Date(p.maghrib.getTime() - 45 * 60 * 1000),
-        timeZone,
-      ),
-      MIDNIGHT: toTimeZone(s.middleOfTheNight, timeZone),
-      LAST_THIRD: toTimeZone(s.lastThirdOfTheNight, timeZone),
-      offset: offset,
+      now,
+      actualDate: now,
+      effectiveDate,
+      actualDateHijri,
+      effectiveDateHijri,
+      isPostMaghrib,
+      refs,
+      nextDayFajr,
     };
-  }, [coords?.latitude, coords?.longitude]);
-
-  return references;
+  }, [now, coords]);
 };
 
-// --- STATUS HESAPLAYICI ---
+// --- GÜVENLİ STATUS HESAPLAYICI ---
 export const getAmelStatus = (
-  references: TimeRefs | null,
-  startRef: string | null | undefined,
-  endRef: string | null | undefined,
+  engine: IslamicTimeState | null | undefined, // undefined desteği eklendi
+  startRefKey?: string | null,
+  endRefKey?: string | null,
 ): AmelStatusResult => {
-  if (!references) {
+  // 1. Engine Kontrolü
+  if (!engine || !engine.refs || !engine.now) {
     return {
       status: "loading",
-      text: "--:--:--",
-      message: "Yükleniyor",
+      text: "--:--",
       color: "#9CA3AF",
+      percent: 0,
     };
   }
 
-  const nowShifted = Date.now() + references.offset;
+  const { now, refs } = engine;
 
-  if (!startRef || !endRef) {
-    const endOfDay = new Date(nowShifted);
-    endOfDay.setUTCHours(23, 59, 59, 999);
-
-    return {
-      status: "all_day",
-      text: formatMs(endOfDay.getTime() - nowShifted),
-      message: "Bitmesine:", // <-- BURASI GÜNCELLENDİ (Günün Bitimine -> Bitmesine)
-      color: "#3B82F6",
-    };
-  }
-
-  // TypeScript Düzeltmesi: as keyof TimeRefs
-  const startDate = references[startRef as keyof TimeRefs];
-  const endDate = references[endRef as keyof TimeRefs];
-
-  if (!(startDate instanceof Date) || !(endDate instanceof Date)) {
-    return {
-      status: "error",
-      text: "Hata",
-      message: "Veri Hatası",
-      color: "#EF4444",
-    };
-  }
-
-  const startMs = startDate.getTime();
-  const endMs = endDate.getTime();
-
-  if (nowShifted < startMs) {
-    return {
-      status: "not_started",
-      text: formatMs(startMs - nowShifted),
-      message: "Başlamasına:",
-      color: "#F59E0B",
-    };
-  }
-  if (nowShifted >= startMs && nowShifted < endMs) {
+  // 2. Vakit Referansı Yoksa (Örn: Tüm gün süren amel)
+  if (!startRefKey || !endRefKey) {
     return {
       status: "active",
-      text: formatMs(endMs - nowShifted),
-      message: "Bitmesine:",
+      text: "Tüm Gün",
+      color: "#3B82F6",
+      percent: 100,
+    };
+  }
+
+  // 3. Anahtar Kontrolü (Type Guard)
+  // Eğer veritabanında 'GECE_YARISI' yazıyor ama bizde 'MIDNIGHT' varsa patlamaması için
+  const sKey = startRefKey as PrayerRefKeys;
+  const eKey = endRefKey as PrayerRefKeys;
+
+  const startRef = refs[sKey];
+  const endRef = refs[eKey];
+
+  // 4. Tarih Nesnesi Kontrolü (En kritik yer burası)
+  if (
+    !startRef ||
+    !endRef ||
+    !(startRef instanceof Date) ||
+    !(endRef instanceof Date)
+  ) {
+    return {
+      status: "error",
+      text: "Vakit Yok", // Kullanıcıya 'Hata' yerine daha yumuşak mesaj
+      color: "#EF4444",
+      percent: 0,
+    };
+  }
+
+  const nowMs = now.getTime();
+  const startMs = startRef.getTime();
+  const endMs = endRef.getTime();
+
+  // 5. Durum Analizi
+  if (nowMs < startMs) {
+    return {
+      status: "future",
+      text: `${formatDuration(startMs - nowMs)} kaldı`,
+      color: "#F59E0B",
+      percent: 0,
+    };
+  }
+
+  if (nowMs >= startMs && nowMs < endMs) {
+    const totalDuration = endMs - startMs;
+    const elapsed = nowMs - startMs;
+    // Sıfıra bölünme hatasını engelle
+    const percent =
+      totalDuration > 0 ? Math.min(100, (elapsed / totalDuration) * 100) : 100;
+
+    return {
+      status: "active",
+      text: `${formatDuration(endMs - nowMs)} kaldı`,
       color: "#10B981",
+      percent,
     };
   }
 
   return {
     status: "expired",
-    text: "Vakit Geçti",
-    message: "",
+    text: "Vakit Çıktı",
     color: "#EF4444",
+    percent: 100,
   };
 };

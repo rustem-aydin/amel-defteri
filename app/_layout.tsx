@@ -22,9 +22,10 @@ import {
 } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { db } from "@/db/client";
+import { db, resetDatabase } from "@/db/client";
 import migrations from "@/drizzle/migrations";
 import { migrate } from "drizzle-orm/expo-sqlite/migrator";
+import { migrateToHijriCalendar } from "@/db/migrations/migrateToHijri";
 
 // Temalar ve Hooklar
 import { TimeEngineProvider } from "@/context/TimeEngineContext";
@@ -58,7 +59,20 @@ export default function RootLayout() {
 
     try {
       setErrorMsg(null);
+
+      // 1. Drizzle migrationları çalıştır
       await migrate(db, migrations);
+
+      // 2. Hicri Takvim Migration'ı çalıştır
+      console.log("🌙 Hicri Takvim Migration başlıyor...");
+      const migrationResult = await migrateToHijriCalendar();
+
+      if (migrationResult.success) {
+        console.log("✅ Hicri Migration başarılı!");
+      } else {
+        console.warn("⚠️ Hicri Migration hatası:", migrationResult.error);
+      }
+
       setAppReady(true);
     } catch (e: any) {
       setErrorMsg(e.message || "Veritabanı oluşturulurken hata oluştu.");

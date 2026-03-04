@@ -1,15 +1,17 @@
 CREATE TABLE `daily_logs` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`deed_id` integer,
-	`date` text,
+	`date_hijri` text NOT NULL,
+	`date_gregorian` text NOT NULL,
 	`is_intended` integer DEFAULT 0,
 	`is_completed` integer DEFAULT 0,
 	`earned_points` integer DEFAULT 0,
 	FOREIGN KEY (`deed_id`) REFERENCES `deeds`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `idx_daily_logs_deed_date` ON `daily_logs` (`deed_id`,`date`);--> statement-breakpoint
-CREATE INDEX `idx_daily_logs_date` ON `daily_logs` (`date`);--> statement-breakpoint
+CREATE UNIQUE INDEX `idx_daily_logs_deed_date_hijri` ON `daily_logs` (`deed_id`,`date_hijri`);--> statement-breakpoint
+CREATE INDEX `idx_daily_logs_date_hijri` ON `daily_logs` (`date_hijri`);--> statement-breakpoint
+CREATE INDEX `idx_daily_logs_date_gregorian` ON `daily_logs` (`date_gregorian`);--> statement-breakpoint
 CREATE TABLE `deed_categories` (
 	`id` integer PRIMARY KEY NOT NULL,
 	`name` text NOT NULL
@@ -70,17 +72,16 @@ CREATE TABLE `resources` (
 CREATE TABLE `user_deeds` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`deed_id` integer NOT NULL,
-	`added_at` text NOT NULL,
-	`removed_at` text,
+	`added_at_hijri` text NOT NULL,
+	`removed_at_hijri` text,
+	`added_at_gregorian` text NOT NULL,
+	`removed_at_gregorian` text,
+	`level` integer DEFAULT 1,
+	`last_milestone` integer DEFAULT 0,
 	`target_count` integer DEFAULT 1,
 	FOREIGN KEY (`deed_id`) REFERENCES `deeds`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `idx_user_deeds_unique_deed_id` ON `user_deeds` (`deed_id`);--> statement-breakpoint
-CREATE INDEX `idx_user_deeds_added_at` ON `user_deeds` (`added_at`);--> statement-breakpoint
-CREATE INDEX `idx_user_deeds_removed_at` ON `user_deeds` (`removed_at`);--> statement-breakpoint
-CREATE TABLE `user_profile` (
-	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
-	`total_points` integer DEFAULT 0,
-	`level` integer DEFAULT 1
-);
+CREATE INDEX `idx_user_deeds_added_at_hijri` ON `user_deeds` (`added_at_hijri`);--> statement-breakpoint
+CREATE INDEX `idx_user_deeds_removed_at_hijri` ON `user_deeds` (`removed_at_hijri`);

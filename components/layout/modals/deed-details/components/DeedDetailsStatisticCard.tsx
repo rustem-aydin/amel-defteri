@@ -4,17 +4,11 @@ import { View } from "@/components/ui/view";
 import { usecalculateDeedTotalPoints } from "@/db/hooks/useAllQueries";
 import React from "react";
 
-export function DetailsStatistic({
-  id,
-  level,
-  deedPoints,
-  intentionPoints,
-}: any) {
+export function DetailsStatistic({ id, level, deedPoints }: any) {
   const { data } = usecalculateDeedTotalPoints(Number(id));
   const stats = [
     { title: "Seviye", value: level },
     { title: "Amel Puanı", value: deedPoints },
-    { title: "Niyet Puanı", value: intentionPoints },
     { title: "Kazanılan Puan", value: data },
   ];
 
