@@ -247,3 +247,46 @@ Colors are reactive; changing mode re-renders all `useColor()` calls.
 5. **Queries**: Primary index is Hijri, use `dateHijri` for all WHERE clauses
 6. **UI Components**: Accept Hijri date strings, display using `formatHijriDate()` or `formatHijriDateShort()`
 7.
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues on `rustem-aydin/amel-defteri` (via `gh` CLI). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` at repo root, ADRs in `docs/adr/`. See `docs/agents/domain.md`.
+
+## AI Skills Kullanım Kuralları
+
+Bu projede global skill'ler (`~/.agents/skills/`) proje-scoped olarak `.opencode/opencode.json` üzerinden aktif. Skill'leri **iş türüne göre** kullan - gerekince yükle, her zaman yükleme.
+
+**Zorunlu tetikleyiciler** (AI bunları görür görmez ilgili skill'i yüklemeli):
+
+| Ne zaman                                                                      | Hangi skill / agent                 | Neden                                                                                          |
+| ----------------------------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Herhangi bir **component**, **list**, **animation**, **navigation** kodu yaz  | `subagent: react-native`            | `.opencode/agent/react-native.md` — vercel-react-native-skills'i otomatik yükler               |
+| Bir **FlashList** / FlatList görürsen                                        | `vercel-react-native-skills`        | `rules/list-performance-*.md` — virtualize, item memo, callback stabilize                      |
+| **Reanimated** animasyonu ekle / düzenle                                      | `vercel-react-native-skills`        | `rules/animation-*.md` — GPU properties, derived values                                        |
+| **Görsel** kullan (`<Image>` vs)                                              | `vercel-react-native-skills`        | `rules/ui-expo-image.md` — `expo-image` zorunlu                                                |
+| **Press** handler ekle (`TouchableOpacity` vs)                                | `vercel-react-native-skills`        | `rules/ui-pressable.md` — `Pressable` zorunlu                                                  |
+| **expo-router** route/screen düzenle                                          | `vercel-react-native-skills`        | `rules/navigation-*.md` — native stack                                                         |
+| **DB şeması / sorgu** yaz (`db/schema.ts`, `db/repos/*`)                      | `postgres-drizzle`                  | Drizzle best practices (bu projede Expo SQLite + Drizzle); RLS / pooling SQLite'ta uygulanmaz |
+| **Mimari karar** alınacak (yeni modül, refactor)                              | `codebase-design` + `domain-modeling` | Derin modül, seam, ADR çıkarımı                                                              |
+| **Issue / ticket** işle (kapat, triage et, ticket'a çevir)                    | `triage` + `to-tickets`             | Triage label'ları `docs/agents/triage-labels.md`'de                                            |
+| **Sunum / UI tasarım** önerisi (renk, tipografi, bileşen)                     | `web-design-guidelines` veya `ui-ux-pro-max` | Erişilebilirlik ve design system denetimi                                                    |
+| **Bug** debug et ("çalışmıyor", "hata", "yavaş")                              | `diagnosing-bugs`                   | Doğrudan hipotez-test döngüsü                                                                  |
+| **TDD** ile geliştirme iste                                                   | `tdd`                               | Önce test, sonra kod                                                                           |
+| **Spec / ticket** üret (konuşmadan iş çıkar)                                  | `to-spec` / `to-tickets`            | docs/agents/issue-tracker.md GitHub üzerinden                                                 |
+
+**Yasaklı kullanımlar** (gereksiz / yanlış):
+- `vercel-react-best-practices` → bu proje Next.js değil, kullanma.
+- `deploy-to-vercel` → mobile app, kullanma.
+- `postgres-drizzle` → pooling/RLS/full-text tavsiyesi verme; Expo SQLite üzerinde bu kavramlar yok.
+
+**Varsayılan davranış**: bir skill'in tetikleyicisi netse, kullanıcı onayını beklemeden yükle. Aksi halde önce sor.
